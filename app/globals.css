@@ -113,6 +113,21 @@
 
 .prose-chat {
   @apply prose prose-sm max-w-none text-foreground dark:prose-invert;
+  direction: rtl;
+  text-align: right;
+}
+
+.prose-chat .bidi-prose-line {
+  direction: rtl;
+  text-align: right;
+  unicode-bidi: isolate;
+}
+
+.prose-chat .bidi-ltr-unit {
+  direction: ltr;
+  text-align: left;
+  unicode-bidi: isolate;
+  overflow-wrap: anywhere;
 }
 
 .prose-chat :where(p, ul, ol, pre, blockquote):first-child {
@@ -131,5 +146,5 @@
 
 .prose-chat code {
   direction: ltr;
-  unicode-bidi: plaintext;
+  unicode-bidi: isolate;
 }

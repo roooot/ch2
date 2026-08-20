@@ -3,6 +3,7 @@
 import { useRef } from "react";
 import { Paperclip, Send } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { Field, FieldLabel } from "@/components/ui/field";
 import {
   InputGroup,
@@ -17,11 +18,13 @@ export function ChatInput({
   onChange,
   onSubmit,
   isLoading,
+  isNewConversation,
 }: {
   value: string;
   onChange: (value: string) => void;
   onSubmit: () => void;
   isLoading: boolean;
+  isNewConversation: boolean;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -53,20 +56,28 @@ export function ChatInput({
   };
 
   return (
-    <Field>
-      <FieldLabel htmlFor="chat-message" className="sr-only">
+    <Field className="relative isolate">
+      <div
+        aria-hidden="true"
+        className={cn(
+          "pointer-events-none absolute -inset-x-4 -inset-y-5 z-0 rounded-[1.75rem] bg-primary/15 blur-3xl opacity-0 transition-opacity duration-500 motion-reduce:transition-none dark:bg-primary/20",
+          isNewConversation && "opacity-100"
+        )}
+      />
+      <FieldLabel htmlFor="chat-message" className="relative z-10 sr-only">
         پیام شما برای Liara Copilot
       </FieldLabel>
-      <InputGroup className="h-auto rounded-lg bg-card shadow-sm">
+      <InputGroup className="relative z-10 h-auto rounded-lg bg-card shadow-sm">
         <InputGroupTextarea
           id="chat-message"
+          dir="auto"
           value={value}
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="سؤال خود را دربارهٔ لیارا بپرسید…"
           rows={1}
           disabled={isLoading}
-          className="min-h-20 max-h-44 text-sm leading-6"
+          className="min-h-20 max-h-44 text-start text-sm leading-6 [unicode-bidi:plaintext]"
         />
         <InputGroupAddon align="block-end" className="justify-between border-t border-border">
           <div className="flex items-center gap-1">

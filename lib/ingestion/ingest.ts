@@ -18,44 +18,84 @@ import type { Prisma } from "@prisma/client";
  * 5. ذخیره Document و Chunk ها در MySQL
  */
 
-const DOCS_BASE_URL = "https://docs.liara.ir/docs";
+const DOCS_BASE_URL = "https://docs.liara.ir";
+const LLM_DOCS_PREFIX = "public/llms/";
 
 function computeHash(content: string): string {
   return crypto.createHash("sha256").update(content).digest("hex");
 }
 
 function inferCategory(path: string): string {
-  const segments = path.split("/").filter((s) => s && s !== "docs");
+  const segments = path
+    .replace(LLM_DOCS_PREFIX, "")
+    .split("/")
+    .filter(Boolean);
   return segments.length > 1 ? segments[0] : "عمومی";
 }
 
-function buildDocUrl(path: string): string {
-  const cleanPath = path.replace(/^docs\//, "").replace(/\.mdx?$/, "");
+function buildDocUrl(path: string, rawContent = ""): string {
+  const originalLink = rawContent.match(/^Original link:\s*(https?:\/\/\S+)\s*$/im)?.[1];
+  if (originalLink) return originalLink.replace(/\/+$/, "");
+
+  const cleanPath = path
+    .replace(LLM_DOCS_PREFIX, "")
+    .replace(/\.mdx?$/, "");
   return `${DOCS_BASE_URL}/${cleanPath}`;
+}
+
+function stripOriginalLink(content: string): string {
+  return content.replace(/^Original link:\s*https?:\/\/\S+\s*\r?\n+/i, "").trim();
 }
 
 export interface IngestStats {
   totalFiles: number;
+  processed: number;
   updated: number;
   skippedUnchanged: number;
   failed: number;
   totalChunks: number;
+  nextCursor?: string;
+  completed: boolean;
 }
 
-export async function ingestFromGitHub(options?: { clean?: boolean }): Promise<IngestStats> {
+export interface IngestOptions {
+  clean?: boolean;
+  /** آخرین مسیر پردازش‌شده؛ برای اجرای ایمن و مرحله‌ای در production. */
+  cursor?: string;
+  /** در حالت CLI نبود این مقدار یعنی همهٔ فایل‌ها پردازش شوند. */
+  limit?: number;
+}
+
+export async function ingestFromGitHub(options?: IngestOptions): Promise<IngestStats> {
   const repo = process.env.DOCS_GITHUB_REPO || "liara-cloud/docs";
-  const branch = process.env.DOCS_GITHUB_BRANCH || "main";
+  const branch = process.env.DOCS_GITHUB_BRANCH || "master";
+
+  const files = await listMarkdownFiles(repo, branch);
+  const cursor = options?.cursor;
+  const cursorIndex = cursor
+    ? files.findIndex((file) => file.path === cursor)
+    : -1;
+  const startIndex = cursorIndex >= 0
+    ? cursorIndex + 1
+    : cursor
+      ? files.findIndex((file) => file.path > cursor)
+      : 0;
+  const safeStartIndex = startIndex < 0 ? files.length : startIndex;
+  const selectedFiles = options?.limit
+    ? files.slice(safeStartIndex, safeStartIndex + options.limit)
+    : files.slice(safeStartIndex);
+  const completed = safeStartIndex + selectedFiles.length >= files.length;
 
   const stats: IngestStats = {
-    totalFiles: 0,
+    totalFiles: files.length,
+    processed: selectedFiles.length,
     updated: 0,
     skippedUnchanged: 0,
     failed: 0,
     totalChunks: 0,
+    nextCursor: selectedFiles.at(-1)?.path,
+    completed,
   };
-
-  const files = await listMarkdownFiles(repo, branch);
-  stats.totalFiles = files.length;
   const currentSourceUrls = files.map((file) => buildDocUrl(file.path));
 
   if (options?.clean) {
@@ -64,14 +104,15 @@ export async function ingestFromGitHub(options?: { clean?: boolean }): Promise<I
     });
   }
 
-  for (const file of files) {
+  for (const file of selectedFiles) {
     try {
       const raw = await fetchRawContent(file.url);
       const parsed = matter(raw);
-      const title = (parsed.data?.title as string) || deriveTitle(parsed.content, file.path);
-      const sourceUrl = buildDocUrl(file.path);
+      const content = stripOriginalLink(parsed.content);
+      const title = (parsed.data?.title as string) || deriveTitle(content, file.path);
+      const sourceUrl = buildDocUrl(file.path, raw);
       const category = (parsed.data?.category as string) || inferCategory(file.path);
-      const contentHash = computeHash(`${title}\u0000${category}\u0000${parsed.content}`);
+      const contentHash = computeHash(`${title}\u0000${category}\u0000${content}`);
 
       const existing = await prisma.document.findUnique({ where: { sourceUrl } });
 
@@ -80,7 +121,7 @@ export async function ingestFromGitHub(options?: { clean?: boolean }): Promise<I
         continue;
       }
 
-      const textChunks = chunkText(parsed.content, 350, 50).filter(Boolean);
+      const textChunks = chunkText(content, 350, 50).filter(Boolean);
       if (textChunks.length === 0) {
         throw new Error("Document has no indexable content.");
       }
@@ -95,7 +136,7 @@ export async function ingestFromGitHub(options?: { clean?: boolean }): Promise<I
             title,
             category,
             contentHash,
-            rawContent: parsed.content,
+            rawContent: content,
             sourcePath: file.path,
           },
           create: {
@@ -104,7 +145,7 @@ export async function ingestFromGitHub(options?: { clean?: boolean }): Promise<I
             title,
             category,
             contentHash,
-            rawContent: parsed.content,
+            rawContent: content,
           },
         });
 
@@ -134,8 +175,9 @@ export async function ingestFromGitHub(options?: { clean?: boolean }): Promise<I
     }
   }
 
-  // در حالت clean فقط وقتی همهٔ اسناد موفق بوده‌اند، فایل‌هایی که دیگر در منبع وجود ندارند حذف می‌شوند.
-  if (options?.clean) {
+  // در حالت clean فقط پس از کامل‌شدن corpus و وقتی هیچ سندی خطا نداشته باشد،
+  // فایل‌های حذف‌شده از منبع را پاک می‌کنیم. اجرای batch نباید دادهٔ قدیمی را حذف کند.
+  if (options?.clean && completed) {
     if (stats.failed > 0) {
       logger.warn("ingest_clean_stale_documents_preserved", { failed: stats.failed });
     } else {

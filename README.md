@@ -186,7 +186,7 @@ npm run dev
 | `MODEL_EMBEDDING` | مدل Embedding (پیش‌فرض `text-embedding-3-small`) |
 | `ADMIN_SECRET` | برای عملیات ادمین (رزرو شده برای توسعه‌های آینده) |
 | `RATE_LIMIT_MAX_REQUESTS` / `RATE_LIMIT_WINDOW_MS` | تنظیمات Rate Limiting |
-| `DOCS_GITHUB_REPO` / `DOCS_GITHUB_BRANCH` | ریپو/شاخه منبع Ingestion (پیش‌فرض `liara-cloud/docs` / `main`) |
+| `DOCS_GITHUB_REPO` / `DOCS_GITHUB_BRANCH` | ریپو/شاخه منبع Ingestion (پیش‌فرض `liara-cloud/docs` / `master`) |
 | `GITHUB_TOKEN` | (اختیاری) برای افزایش Rate Limit فراخوانی GitHub API در Ingestion |
 
 ⚠️ **هرگز** فایل `.env.local` یا هر فایل حاوی کلید واقعی را کامیت نکنید (در `.gitignore` مسدود شده است). فایل `.env.example` نیز باید فقط placeholder داشته باشد. روی پنل لیارا این مقادیر باید از بخش **Environment Variables** تنظیم شوند، نه در کد.
@@ -204,6 +204,17 @@ npm run ingest
 # پاکسازی کامل و ایمپورت مجدد از صفر
 npm run ingest:clean
 ```
+
+### ورود مرحله‌ای در production
+
+در production، برای جلوگیری از timeout، endpoint محافظت‌شدهٔ `POST /api/admin/ingest`
+هر بار یک batch کوچک از corpus رسمی را وارد می‌کند. هدر `x-admin-secret` باید با
+`ADMIN_SECRET` برابر باشد. پاسخ شامل `nextCursor` و `completed` است؛ مقدار `nextCursor`
+را تا زمان `completed: true` در فراخوانی بعدی بفرستید. `GET /api/admin/ingest` نیز با
+همان هدر، تعداد `documents`، `chunks` و embeddingهای آماده را برمی‌گرداند.
+
+منبع canonical فقط `public/llms` از شاخهٔ `master` مخزن رسمی است تا اسناد مخصوص LLM
+بدون تکرار و بدون JSX وارد شوند.
 
 نحوه عملکرد:
 1. دریافت لیست فایل‌های `.md`/`.mdx` از GitHub API (`git/trees?recursive=1`).

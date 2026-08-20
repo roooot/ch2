@@ -202,7 +202,13 @@ export function ChatContainer() {
 
         <footer className="shrink-0 border-t border-border/80 bg-background px-3 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6">
           <div className="mx-auto w-full max-w-5xl">
-            <ChatInput isLoading={isLoading} onChange={setInput} onSubmit={() => sendMessage(input)} value={input} />
+            <ChatInput
+              isLoading={isLoading}
+              isNewConversation={displayMessages.length === 0}
+              onChange={setInput}
+              onSubmit={() => sendMessage(input)}
+              value={input}
+            />
             <p className="mt-2 text-center text-[11px] leading-5 text-muted-foreground">
               پاسخ‌های مهم را با مستندات رسمی لیارا تطبیق دهید.
             </p>
