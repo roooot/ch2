@@ -1,67 +1,74 @@
 "use client";
 
-import { Rocket, Database, Bug, FileJson, Globe, Container } from "lucide-react";
-import { Card } from "@/components/ui/card";
+import { ArrowUpLeft, Database, FileJson, Rocket, Wrench } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@/components/ui/empty";
 
-const SCENARIOS = [
+const STARTING_POINTS = [
   {
     icon: Rocket,
-    title: "دیپلوی پروژه Next.js",
-    prompt: "چطور می‌توانم یک پروژه Next.js را روی لیارا دیپلوی کنم؟",
+    title: "اولین دیپلوی",
+    prompt: "برای دیپلوی یک پروژه Next.js روی لیارا از کجا شروع کنم؟",
   },
   {
     icon: Database,
-    title: "اتصال به دیتابیس MySQL",
-    prompt: "چطور از اپلیکیشن Node.js خودم به دیتابیس MySQL لیارا وصل شوم؟",
+    title: "اتصال دیتابیس",
+    prompt: "چطور اپ Node.js را به دیتابیس MySQL لیارا متصل کنم؟",
   },
   {
-    icon: Bug,
-    title: "عیب‌یابی خطای دیپلوی",
-    prompt: "اپلیکیشن من بعد از دیپلوی با خطا مواجه می‌شود، کمکم کن عیب‌یابی کنم.",
+    icon: Wrench,
+    title: "خطای اجرا",
+    prompt: "اپلیکیشن من بعد از دیپلوی خطا می‌دهد؛ برای عیب‌یابی چه اطلاعاتی لازم داری؟",
   },
   {
     icon: FileJson,
-    title: "تحلیل فایل liara.json",
-    prompt: "این فایل liara.json من است، لطفاً بررسی کن مشکلی ندارد:\n```json\n{\n  \"platform\": \"next\",\n  \"app\": \"my-app\"\n}\n```",
-  },
-  {
-    icon: Container,
-    title: "دیپلوی با Docker",
-    prompt: "چطور یک اپلیکیشن را با Dockerfile روی لیارا دیپلوی کنم؟",
-  },
-  {
-    icon: Globe,
-    title: "اتصال دامنه اختصاصی",
-    prompt: "چطور دامنه اختصاصی خودم را به اپ لیارا متصل کنم؟",
+    title: "تحلیل پیکربندی",
+    prompt: "فایل liara.json من را بررسی کن و بگو برای دیپلوی آماده است یا نه.",
   },
 ];
 
 export function EmptyState({ onSelect }: { onSelect: (prompt: string) => void }) {
   return (
-    <div className="flex flex-col items-center justify-center flex-1 px-4 py-10 text-center">
-      <div className="mb-6">
-        <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10">
-          <Rocket className="h-8 w-8 text-primary" />
+    <Empty className="my-auto min-h-[26rem] border-0 bg-transparent px-0 py-8 sm:py-12">
+      <EmptyHeader className="max-w-xl">
+        <EmptyMedia variant="icon" className="size-12 rounded-md bg-primary text-primary-foreground">
+          <Rocket aria-hidden="true" />
+        </EmptyMedia>
+        <EmptyTitle className="text-xl font-semibold sm:text-2xl">فضای کار مستندات لیارا</EmptyTitle>
+        <EmptyDescription className="max-w-lg text-sm leading-7">
+          برای پیکربندی، دیپلوی، خطاهای اجرا یا خواندن مستندات دقیق کمک بگیرید. پاسخ‌ها همراه با منبع ارائه می‌شوند.
+        </EmptyDescription>
+      </EmptyHeader>
+      <EmptyContent className="max-w-2xl items-stretch gap-2">
+        <p className="text-right text-xs font-medium text-muted-foreground">از یکی از نقطه‌های شروع استفاده کنید</p>
+        <div className="grid grid-cols-1 gap-px overflow-hidden border border-border bg-border sm:grid-cols-2">
+          {STARTING_POINTS.map((item) => {
+            const Icon = item.icon;
+            return (
+              <Button
+                key={item.title}
+                type="button"
+                variant="ghost"
+                className="h-auto justify-between rounded-none bg-background px-4 py-3 text-right hover:bg-accent"
+                onClick={() => onSelect(item.prompt)}
+              >
+                <span className="flex items-center gap-3">
+                  <Icon data-icon="inline-start" />
+                  <span>{item.title}</span>
+                </span>
+                <ArrowUpLeft data-icon="inline-end" />
+              </Button>
+            );
+          })}
         </div>
-        <h1 className="text-2xl font-bold mb-2">به Liara Copilot خوش آمدید 👋</h1>
-        <p className="text-sm text-muted-foreground max-w-md mx-auto">
-          دستیار هوشمند مستندات ابر لیارا. سوالات خود را بپرسید، فایل liara.json یا لاگ خطا را برای
-          تحلیل ارسال کنید یا یکی از سناریوهای زیر را انتخاب کنید.
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 w-full max-w-3xl">
-        {SCENARIOS.map((s) => (
-          <Card
-            key={s.title}
-            onClick={() => onSelect(s.prompt)}
-            className="p-4 cursor-pointer text-right transition-colors hover:border-primary/60 hover:bg-accent/40"
-          >
-            <s.icon className="h-5 w-5 text-primary mb-2" />
-            <p className="text-sm font-medium">{s.title}</p>
-          </Card>
-        ))}
-      </div>
-    </div>
+      </EmptyContent>
+    </Empty>
   );
 }

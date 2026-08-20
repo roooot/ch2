@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { ChevronDown, CircleDot, Loader2, Search, Sparkles, Wrench, Database, HelpCircle, FileSearch } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import type { ThinkingStep, ThinkingStepType } from "@/types";
 
 /**
@@ -28,20 +29,21 @@ export function ThinkingSteps({ steps }: { steps: ThinkingStep[] }) {
 
   return (
     <div className="mb-2 rounded-md border bg-muted/40 text-xs">
-      <button
+      <Button
         type="button"
+        variant="ghost"
         onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center justify-between px-3 py-2 text-muted-foreground hover:text-foreground transition-colors"
+        className="h-auto w-full justify-between rounded-none px-3 py-2 text-muted-foreground hover:text-foreground"
       >
         <span className="flex items-center gap-1.5 font-medium">
-          <Sparkles className="h-3.5 w-3.5" />
+          <Sparkles data-icon="inline-start" />
           مراحل فکر کردن ایجنت ({steps.length} مرحله)
         </span>
-        <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
-      </button>
+        <ChevronDown data-icon="inline-end" className={cn("transition-transform", open && "rotate-180")} />
+      </Button>
 
       {open && (
-        <ul className="space-y-1.5 px-3 pb-3">
+        <ul className="flex flex-col gap-1.5 px-3 pb-3">
           {steps.map((step, idx) => {
             const Icon = ICONS[step.type] ?? CircleDot;
             return (

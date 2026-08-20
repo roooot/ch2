@@ -1,14 +1,17 @@
 "use client";
 
 import { useRef } from "react";
-import { Send, Paperclip, Loader2 } from "lucide-react";
-import { Textarea } from "@/components/ui/textarea";
-import { Button } from "@/components/ui/button";
+import { Paperclip, Send } from "lucide-react";
 import { toast } from "sonner";
+import { Field, FieldLabel } from "@/components/ui/field";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupTextarea,
+} from "@/components/ui/input-group";
+import { Spinner } from "@/components/ui/spinner";
 
-/**
- * ورودی چت + دکمه پیوست فایل (برای آپلود liara.json یا لاگ خطا)
- */
 export function ChatInput({
   value,
   onChange,
@@ -22,19 +25,20 @@ export function ChatInput({
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
       if (value.trim() && !isLoading) onSubmit();
     }
-  }
+  };
 
-  async function handleFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
+  const handleFileSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
     if (!file) return;
 
     if (file.size > 200 * 1024) {
-      toast.error("حجم فایل باید کمتر از 200KB باشد.");
+      toast.error("حجم فایل باید کمتر از ۲۰۰ کیلوبایت باشد.");
+      event.target.value = "";
       return;
     }
 
@@ -45,48 +49,60 @@ export function ChatInput({
     }\n${text.slice(0, 6000)}\n\`\`\``;
 
     onChange(wrapped);
-    e.target.value = "";
-  }
+    event.target.value = "";
+  };
 
   return (
-    <div className="flex items-end gap-2 rounded-2xl border bg-background p-2 shadow-sm">
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".json,.log,.txt"
-        className="hidden"
-        onChange={handleFileSelect}
-      />
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon"
-        className="shrink-0"
-        onClick={() => fileInputRef.current?.click()}
-        aria-label="پیوست فایل liara.json یا لاگ خطا"
-      >
-        <Paperclip className="h-4 w-4" />
-      </Button>
-
-      <Textarea
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder="سوال خود را درباره لیارا بپرسید... (Enter برای ارسال، Shift+Enter برای خط جدید)"
-        rows={1}
-        className="max-h-40 flex-1 resize-none border-0 shadow-none focus-visible:ring-0 bg-transparent"
-      />
-
-      <Button
-        type="button"
-        size="icon"
-        className="shrink-0 rounded-full"
-        disabled={!value.trim() || isLoading}
-        onClick={onSubmit}
-        aria-label="ارسال پیام"
-      >
-        {isLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4 -scale-x-100" />}
-      </Button>
-    </div>
+    <Field>
+      <FieldLabel htmlFor="chat-message" className="sr-only">
+        پیام شما برای Liara Copilot
+      </FieldLabel>
+      <InputGroup className="h-auto rounded-lg bg-card shadow-sm">
+        <InputGroupTextarea
+          id="chat-message"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="سؤال خود را دربارهٔ لیارا بپرسید…"
+          rows={1}
+          disabled={isLoading}
+          className="min-h-20 max-h-44 text-sm leading-6"
+        />
+        <InputGroupAddon align="block-end" className="justify-between border-t border-border">
+          <div className="flex items-center gap-1">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json,.log,.txt"
+              className="sr-only"
+              onChange={handleFileSelect}
+            />
+            <InputGroupButton
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => fileInputRef.current?.click()}
+              aria-label="پیوست فایل liara.json یا لاگ خطا"
+              title="پیوست فایل"
+              disabled={isLoading}
+            >
+              <Paperclip data-icon="inline-start" />
+            </InputGroupButton>
+            <span className="hidden text-[11px] text-muted-foreground sm:inline">Enter برای ارسال · Shift + Enter برای خط جدید</span>
+          </div>
+          <InputGroupButton
+            type="button"
+            variant="default"
+            size="icon-sm"
+            onClick={onSubmit}
+            disabled={!value.trim() || isLoading}
+            aria-label="ارسال پیام"
+            title="ارسال پیام"
+          >
+            {isLoading ? <Spinner aria-label="در حال ارسال" /> : <Send data-icon="inline-start" />}
+          </InputGroupButton>
+        </InputGroupAddon>
+      </InputGroup>
+    </Field>
   );
 }

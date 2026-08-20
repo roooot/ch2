@@ -4,48 +4,64 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --primary: 217 91% 60%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 240 4.8% 95.9%;
-    --secondary-foreground: 240 5.9% 10%;
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 240 4.8% 95.9%;
-    --accent-foreground: 240 5.9% 10%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 217 91% 60%;
-    --radius: 0.65rem;
+    --background: 42 28% 97%;
+    --foreground: 218 38% 14%;
+    --card: 40 33% 99%;
+    --card-foreground: 218 38% 14%;
+    --popover: 40 33% 99%;
+    --popover-foreground: 218 38% 14%;
+    --primary: 211 76% 37%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 42 20% 92%;
+    --secondary-foreground: 218 31% 18%;
+    --muted: 42 18% 93%;
+    --muted-foreground: 218 15% 40%;
+    --accent: 190 24% 91%;
+    --accent-foreground: 218 38% 14%;
+    --destructive: 0 70% 45%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 35 17% 84%;
+    --input: 35 17% 84%;
+    --ring: 211 76% 37%;
+    --radius: 0.55rem;
+    --sidebar-background: 42 24% 95%;
+    --sidebar-foreground: 218 31% 18%;
+    --sidebar-primary: 211 76% 37%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 190 22% 90%;
+    --sidebar-accent-foreground: 218 38% 14%;
+    --sidebar-border: 35 17% 84%;
+    --sidebar-ring: 211 76% 37%;
   }
 
   .dark {
-    --background: 240 10% 6%;
-    --foreground: 0 0% 96%;
-    --card: 240 8% 9%;
-    --card-foreground: 0 0% 96%;
-    --popover: 240 8% 9%;
-    --popover-foreground: 0 0% 96%;
-    --primary: 217 91% 65%;
-    --primary-foreground: 240 10% 6%;
-    --secondary: 240 6% 15%;
-    --secondary-foreground: 0 0% 96%;
-    --muted: 240 6% 15%;
-    --muted-foreground: 240 5% 65%;
-    --accent: 240 6% 15%;
-    --accent-foreground: 0 0% 96%;
-    --destructive: 0 62.8% 45%;
-    --destructive-foreground: 0 0% 96%;
-    --border: 240 6% 18%;
-    --input: 240 6% 18%;
-    --ring: 217 91% 65%;
+    --background: 219 32% 9%;
+    --foreground: 42 22% 93%;
+    --card: 218 29% 12%;
+    --card-foreground: 42 22% 93%;
+    --popover: 218 29% 12%;
+    --popover-foreground: 42 22% 93%;
+    --primary: 191 62% 49%;
+    --primary-foreground: 218 38% 10%;
+    --secondary: 219 19% 18%;
+    --secondary-foreground: 42 22% 93%;
+    --muted: 219 19% 18%;
+    --muted-foreground: 42 11% 67%;
+    --accent: 190 22% 19%;
+    --accent-foreground: 42 22% 93%;
+    --destructive: 0 63% 49%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 219 18% 23%;
+    --input: 219 18% 23%;
+    --ring: 191 62% 49%;
+    --sidebar-background: 219 31% 8%;
+    --sidebar-foreground: 42 20% 91%;
+    --sidebar-primary: 191 62% 49%;
+    --sidebar-primary-foreground: 218 38% 10%;
+    --sidebar-accent: 190 20% 17%;
+    --sidebar-accent-foreground: 42 20% 91%;
+    --sidebar-border: 219 18% 20%;
+    --sidebar-ring: 191 62% 49%;
   }
 
   * {
@@ -54,34 +70,65 @@
 
   html {
     direction: rtl;
+    min-height: 100%;
+    background: hsl(var(--background));
   }
 
   body {
     @apply bg-background text-foreground;
+    min-height: 100dvh;
+    font-family: var(--font-vazirmatn), Tahoma, sans-serif;
     font-feature-settings: "ss01";
+  }
+
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+
+  code,
+  pre,
+  kbd {
+    font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+  }
+
+  ::selection {
+    background: hsl(var(--accent));
+    color: hsl(var(--accent-foreground));
   }
 }
 
-/* اسکرول‌بار سفارشی نازک */
 @layer utilities {
   .scrollbar-thin::-webkit-scrollbar {
     width: 6px;
   }
+
   .scrollbar-thin::-webkit-scrollbar-thumb {
     background-color: hsl(var(--border));
     border-radius: 999px;
   }
 }
 
-/* استایل محتوای مارک‌داون پاسخ ایجنت */
 .prose-chat {
-  @apply prose prose-sm dark:prose-invert max-w-none;
+  @apply prose prose-sm max-w-none text-foreground dark:prose-invert;
 }
+
+.prose-chat :where(p, ul, ol, pre, blockquote):first-child {
+  margin-top: 0;
+}
+
+.prose-chat :where(p, ul, ol, pre, blockquote):last-child {
+  margin-bottom: 0;
+}
+
 .prose-chat pre {
   direction: ltr;
   text-align: left;
-  @apply rounded-md bg-muted p-3 overflow-x-auto text-xs;
+  @apply overflow-x-auto rounded-md bg-muted p-3 text-xs;
 }
+
 .prose-chat code {
   direction: ltr;
   unicode-bidi: plaintext;

@@ -37,7 +37,9 @@ function asPrismaJson(value: unknown): Prisma.InputJsonValue {
 }
 
 const chatRequestSchema = z.object({
-  conversationId: z.string().cuid().optional(),
+  // نسخه‌های قبلی کلاینت در گفت‌وگوی جدید `null` می‌فرستند. آن را مانند
+  // نبود شناسه در نظر می‌گیریم تا درخواست معتبرِ کاربر به خطای 400 نرسد.
+  conversationId: z.string().cuid().nullish().transform((value) => value ?? undefined),
   // useChat تاریخچه را نیز می‌فرستد، اما سرور فقط پیام آخر را می‌پذیرد.
   messages: z
     .array(

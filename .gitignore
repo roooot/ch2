@@ -46,3 +46,7 @@ docs-source/*
 .vscode/*
 !.vscode/extensions.json
 .idea
+
+# Local Codex skill installations
+/.agents/
+/skills-lock.json

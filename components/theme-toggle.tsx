@@ -26,7 +26,7 @@ export function ThemeToggle() {
       aria-label="تغییر تم"
       onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
     >
-      {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+      {theme === "dark" ? <Sun data-icon="inline-start" /> : <Moon data-icon="inline-start" />}
     </Button>
   );
 }

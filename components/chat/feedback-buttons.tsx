@@ -4,6 +4,7 @@ import { useState } from "react";
 import { ThumbsUp, ThumbsDown } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 
 /**
  * دکمه‌های فیدبک 👍/👎 روی هر پاسخ ایجنت
@@ -35,30 +36,34 @@ export function FeedbackButtons({ messageId }: { messageId?: string }) {
 
   return (
     <div className="flex items-center gap-1 mt-2">
-      <button
+      <Button
         type="button"
         onClick={() => submit("UP")}
         disabled={loading}
+        variant="ghost"
+        size="icon"
         className={cn(
-          "p-1.5 rounded-md hover:bg-emerald-500/10 transition-colors",
-          rating === "UP" && "text-emerald-500 bg-emerald-500/10"
+          "size-8",
+          rating === "UP" && "bg-primary/10 text-primary"
         )}
         aria-label="پاسخ مفید بود"
       >
-        <ThumbsUp className="h-3.5 w-3.5" />
-      </button>
-      <button
+        <ThumbsUp data-icon="inline-start" />
+      </Button>
+      <Button
         type="button"
         onClick={() => submit("DOWN")}
         disabled={loading}
+        variant="ghost"
+        size="icon"
         className={cn(
-          "p-1.5 rounded-md hover:bg-red-500/10 transition-colors",
-          rating === "DOWN" && "text-red-500 bg-red-500/10"
+          "size-8",
+          rating === "DOWN" && "bg-destructive/10 text-destructive"
         )}
         aria-label="پاسخ مفید نبود"
       >
-        <ThumbsDown className="h-3.5 w-3.5" />
-      </button>
+        <ThumbsDown data-icon="inline-start" />
+      </Button>
     </div>
   );
 }
