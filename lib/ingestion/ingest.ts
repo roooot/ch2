@@ -1,7 +1,10 @@
 import crypto from "node:crypto";
 import matter from "gray-matter";
 import { prisma } from "@/lib/db/prisma";
-import { listMarkdownFiles, fetchRawContent } from "@/lib/ingestion/github-loader";
+import {
+  listMarkdownFiles,
+  fetchRawContent,
+} from "@/lib/ingestion/github-loader";
 import { generateEmbeddings } from "@/lib/rag/embedding";
 import { chunkText, estimateTokenCount } from "@/lib/utils/tokens";
 import { logger } from "@/lib/utils/logger";
@@ -27,25 +30,24 @@ function computeHash(content: string): string {
 }
 
 function inferCategory(path: string): string {
-  const segments = path
-    .replace(LLM_DOCS_PREFIX, "")
-    .split("/")
-    .filter(Boolean);
+  const segments = path.replace(LLM_DOCS_PREFIX, "").split("/").filter(Boolean);
   return segments.length > 1 ? segments[0] : "عمومی";
 }
 
 function buildDocUrl(path: string, rawContent = ""): string {
-  const originalLink = rawContent.match(/^Original link:\s*(https?:\/\/\S+)\s*$/im)?.[1];
+  const originalLink = rawContent.match(
+    /^Original link:\s*(https?:\/\/\S+)\s*$/im,
+  )?.[1];
   if (originalLink) return originalLink.replace(/\/+$/, "");
 
-  const cleanPath = path
-    .replace(LLM_DOCS_PREFIX, "")
-    .replace(/\.mdx?$/, "");
+  const cleanPath = path.replace(LLM_DOCS_PREFIX, "").replace(/\.mdx?$/, "");
   return `${DOCS_BASE_URL}/${cleanPath}`;
 }
 
 function stripOriginalLink(content: string): string {
-  return content.replace(/^Original link:\s*https?:\/\/\S+\s*\r?\n+/i, "").trim();
+  return content
+    .replace(/^Original link:\s*https?:\/\/\S+\s*\r?\n+/i, "")
+    .trim();
 }
 
 export interface IngestStats {
@@ -77,7 +79,9 @@ interface PreparedDocument {
   chunks: string[];
 }
 
-export async function ingestFromGitHub(options?: IngestOptions): Promise<IngestStats> {
+export async function ingestFromGitHub(
+  options?: IngestOptions,
+): Promise<IngestStats> {
   const repo = process.env.DOCS_GITHUB_REPO || "liara-cloud/docs";
   const branch = process.env.DOCS_GITHUB_BRANCH || "master";
 
@@ -86,11 +90,12 @@ export async function ingestFromGitHub(options?: IngestOptions): Promise<IngestS
   const cursorIndex = cursor
     ? files.findIndex((file) => file.path === cursor)
     : -1;
-  const startIndex = cursorIndex >= 0
-    ? cursorIndex + 1
-    : cursor
-      ? files.findIndex((file) => file.path > cursor)
-      : 0;
+  const startIndex =
+    cursorIndex >= 0
+      ? cursorIndex + 1
+      : cursor
+        ? files.findIndex((file) => file.path > cursor)
+        : 0;
   const safeStartIndex = startIndex < 0 ? files.length : startIndex;
   const selectedFiles = options?.limit
     ? files.slice(safeStartIndex, safeStartIndex + options.limit)
@@ -111,50 +116,63 @@ export async function ingestFromGitHub(options?: IngestOptions): Promise<IngestS
 
   if (options?.clean) {
     logger.info("ingest_clean_start", {
-      message: "اسناد با موفقیت جایگزین می‌شوند و فایل‌های حذف‌شده فقط پس از تکمیل پاک خواهند شد.",
+      message:
+        "اسناد با موفقیت جایگزین می‌شوند و فایل‌های حذف‌شده فقط پس از تکمیل پاک خواهند شد.",
     });
   }
 
   const pendingDocuments: PreparedDocument[] = [];
 
-  for (const file of selectedFiles) {
-    try {
-      const raw = await fetchRawContent(file.url);
-      const parsed = matter(raw);
-      const content = stripOriginalLink(parsed.content);
-      const title = (parsed.data?.title as string) || deriveTitle(content, file.path);
-      const sourceUrl = buildDocUrl(file.path, raw);
-      const category = (parsed.data?.category as string) || inferCategory(file.path);
-      const contentHash = computeHash(`${title}\u0000${category}\u0000${content}`);
+  await Promise.all(
+    selectedFiles.map(async (file) => {
+      try {
+        const raw = await fetchRawContent(file.url);
+        const parsed = matter(raw);
+        const content = stripOriginalLink(parsed.content);
+        const title =
+          (parsed.data?.title as string) || deriveTitle(content, file.path);
+        const sourceUrl = buildDocUrl(file.path, raw);
+        const category =
+          (parsed.data?.category as string) || inferCategory(file.path);
+        const contentHash = computeHash(
+          `${title}\u0000${category}\u0000${content}`,
+        );
 
-      const existing = await prisma.document.findUnique({ where: { sourceUrl } });
+        const existing = await prisma.document.findUnique({
+          where: { sourceUrl },
+        });
 
-      if (!options?.clean && existing && existing.contentHash === contentHash) {
-        stats.skippedUnchanged += 1;
-        continue;
+        if (
+          !options?.clean &&
+          existing &&
+          existing.contentHash === contentHash
+        ) {
+          stats.skippedUnchanged += 1;
+          return;
+        }
+
+        const textChunks = chunkText(content, 350, 50).filter(Boolean);
+        if (textChunks.length === 0) {
+          throw new Error("Document has no indexable content.");
+        }
+        pendingDocuments.push({
+          path: file.path,
+          sourceUrl,
+          title,
+          category,
+          contentHash,
+          content,
+          chunks: textChunks,
+        });
+      } catch (error) {
+        stats.failed += 1;
+        logger.error("document_ingest_failed", {
+          path: file.path,
+          error: error instanceof Error ? error.message : String(error),
+        });
       }
-
-      const textChunks = chunkText(content, 350, 50).filter(Boolean);
-      if (textChunks.length === 0) {
-        throw new Error("Document has no indexable content.");
-      }
-      pendingDocuments.push({
-        path: file.path,
-        sourceUrl,
-        title,
-        category,
-        contentHash,
-        content,
-        chunks: textChunks,
-      });
-    } catch (error) {
-      stats.failed += 1;
-      logger.error("document_ingest_failed", {
-        path: file.path,
-        error: error instanceof Error ? error.message : String(error),
-      });
-    }
-  }
+    }),
+  );
 
   // مدل embedding ورودی‌های متعدد را در یک درخواست پشتیبانی می‌کند. chunkهای چند
   // صفحه را با هم می‌فرستیم تا ورود اولیهٔ corpus هزاران درخواست شبکه‌ای نسازد.
@@ -179,13 +197,17 @@ export async function ingestFromGitHub(options?: IngestOptions): Promise<IngestS
   for (const documents of embeddingBatches) {
     const texts = documents.flatMap((document) => document.chunks);
     const embeddings = await generateEmbeddings(texts);
-    assertEmbeddingsReady(embeddings, texts.length, documents.map((document) => document.path).join(", "));
+    assertEmbeddingsReady(
+      embeddings,
+      texts.length,
+      documents.map((document) => document.path).join(", "),
+    );
 
     let embeddingOffset = 0;
     for (const documentInput of documents) {
       const documentEmbeddings = embeddings.slice(
         embeddingOffset,
-        embeddingOffset + documentInput.chunks.length
+        embeddingOffset + documentInput.chunks.length,
       );
       embeddingOffset += documentInput.chunks.length;
 
@@ -218,7 +240,9 @@ export async function ingestFromGitHub(options?: IngestOptions): Promise<IngestS
               content,
               chunkIndex: index,
               tokenCount: estimateTokenCount(content),
-              embedding: documentEmbeddings[index] as unknown as Prisma.InputJsonValue,
+              embedding: documentEmbeddings[
+                index
+              ] as unknown as Prisma.InputJsonValue,
               embeddingDim: documentEmbeddings[index].length,
             })),
           });
@@ -226,7 +250,10 @@ export async function ingestFromGitHub(options?: IngestOptions): Promise<IngestS
 
         stats.totalChunks += documentInput.chunks.length;
         stats.updated += 1;
-        logger.info("document_ingested", { path: documentInput.path, chunks: documentInput.chunks.length });
+        logger.info("document_ingested", {
+          path: documentInput.path,
+          chunks: documentInput.chunks.length,
+        });
       } catch (error) {
         stats.failed += 1;
         logger.error("document_ingest_failed", {
@@ -241,12 +268,16 @@ export async function ingestFromGitHub(options?: IngestOptions): Promise<IngestS
   // فایل‌های حذف‌شده از منبع را پاک می‌کنیم. اجرای batch نباید دادهٔ قدیمی را حذف کند.
   if (options?.clean && completed) {
     if (stats.failed > 0) {
-      logger.warn("ingest_clean_stale_documents_preserved", { failed: stats.failed });
+      logger.warn("ingest_clean_stale_documents_preserved", {
+        failed: stats.failed,
+      });
     } else {
       const removed = await prisma.document.deleteMany({
         where: { sourceUrl: { notIn: currentSourceUrls } },
       });
-      logger.info("ingest_clean_stale_documents_removed", { count: removed.count });
+      logger.info("ingest_clean_stale_documents_removed", {
+        count: removed.count,
+      });
     }
   }
 
@@ -254,13 +285,23 @@ export async function ingestFromGitHub(options?: IngestOptions): Promise<IngestS
   return stats;
 }
 
-function assertEmbeddingsReady(embeddings: number[][], expectedCount: number, path: string): void {
-  if (embeddings.length !== expectedCount || embeddings.some((embedding) => embedding.length === 0)) {
+function assertEmbeddingsReady(
+  embeddings: number[][],
+  expectedCount: number,
+  path: string,
+): void {
+  if (
+    embeddings.length !== expectedCount ||
+    embeddings.some((embedding) => embedding.length === 0)
+  ) {
     throw new Error(`Embedding generation failed for ${path}.`);
   }
 
   const dimension = embeddings[0]?.length;
-  if (!dimension || embeddings.some((embedding) => embedding.length !== dimension)) {
+  if (
+    !dimension ||
+    embeddings.some((embedding) => embedding.length !== dimension)
+  ) {
     throw new Error(`Embedding dimensions are inconsistent for ${path}.`);
   }
 }
@@ -268,5 +309,10 @@ function assertEmbeddingsReady(embeddings: number[][], expectedCount: number, pa
 function deriveTitle(content: string, fallbackPath: string): string {
   const headingMatch = content.match(/^#\s+(.+)$/m);
   if (headingMatch) return headingMatch[1].trim();
-  return fallbackPath.split("/").pop()?.replace(/\.mdx?$/, "") || "بدون عنوان";
+  return (
+    fallbackPath
+      .split("/")
+      .pop()
+      ?.replace(/\.mdx?$/, "") || "بدون عنوان"
+  );
 }
