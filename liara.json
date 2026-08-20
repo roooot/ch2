@@ -1,0 +1,12 @@
+{
+  "platform": "next",
+  "app": "liara-copilot",
+  "port": 3000,
+  "team-id": "6a86b5ef55e397b04bf25728",
+  "build": {
+    "location": "iran"
+  },
+  "nextjs": {
+    "runtime": "nodejs20"
+  }
+}

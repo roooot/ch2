@@ -1,0 +1,9 @@
+node_modules
+.next
+.env
+.env.*.local
+.env.production
+.git
+liara.zip
+npm-debug.log*
+docs-source

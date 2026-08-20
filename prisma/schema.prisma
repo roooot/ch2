@@ -1,0 +1,186 @@
+// ==========================================================
+// Prisma Schema - Liara Copilot
+// دیتابیس: MySQL (سازگار با MySQL DBaaS لیارا)
+// نکته: به‌جای pgvector، امبدینگ‌ها به‌صورت JSON ذخیره شده و
+// محاسبه Cosine Similarity در سمت اپلیکیشن (Node.js) انجام می‌شود.
+// ==========================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------
+// سند مستندات (هر صفحه از docs.liara.ir یا هر فایل مارک‌داون ریپو)
+// ---------------------------------------------------------
+model Document {
+  id          String   @id @default(cuid())
+  // InnoDB with utf8mb4 limits a unique index to 3072 bytes (768 characters).
+  sourceUrl   String   @db.VarChar(768)
+  sourcePath  String?  @db.VarChar(1024) // مسیر فایل در ریپوی گیت‌هاب
+  title       String   @db.VarChar(512)
+  category    String?  @db.VarChar(255) // مثل: "دیتابیس", "کوبرنتیز", "شبکه"
+  contentHash String   @db.VarChar(64) // برای تشخیص تغییرات و جلوگیری از re-ingest غیرضروری
+  rawContent  String   @db.LongText
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  chunks Chunk[]
+
+  @@index([category])
+  @@unique([sourceUrl])
+  @@map("documents")
+}
+
+// ---------------------------------------------------------
+// تکه‌های متنی سند برای Retrieval (Chunking)
+// embedding به‌صورت JSON آرایه‌ای از اعداد اعشاری ذخیره می‌شود
+// ---------------------------------------------------------
+model Chunk {
+  id         String   @id @default(cuid())
+  documentId String
+  document   Document @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  content    String  @db.Text
+  chunkIndex Int
+  tokenCount Int     @default(0)
+
+  // امبدینگ به صورت JSON: [0.123, -0.045, ...]
+  embedding    Json?
+  embeddingDim Int?    @default(0)
+
+  // برای Full-Text Search در MySQL (FULLTEXT index)
+  // MySQL InnoDB از FULLTEXT روی ستون‌های TEXT/VARCHAR پشتیبانی می‌کند
+  createdAt DateTime @default(now())
+
+  @@index([documentId])
+  @@fulltext([content])
+  @@map("chunks")
+}
+
+// ---------------------------------------------------------
+// گفتگوها (Conversations) - هر کاربر (شناسه سشن/کوکی) می‌تواند چند گفتگو داشته باشد
+// ---------------------------------------------------------
+model Conversation {
+  id         String   @id @default(cuid())
+  sessionId  String   @db.VarChar(255) // شناسه ناشناس کاربر (کوکی)
+  title      String?  @db.VarChar(255)
+  // وضعیت State Machine ایجنت برای حفظ Context بین پیام‌ها
+  agentState Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  messages Message[]
+
+  @@index([sessionId])
+  @@map("conversations")
+}
+
+// ---------------------------------------------------------
+// حافظهٔ پایدار کاربر ناشناس، مشترک بین گفت‌وگوهای یک مرورگر
+// شناسهٔ آن همان sessionId کوکی است؛ با پاک‌شدن کوکی، این ارتباط از بین می‌رود.
+// ---------------------------------------------------------
+model UserMemory {
+  id        String   @id @default(cuid())
+  sessionId String   @unique @db.VarChar(255)
+  summary   String   @db.LongText
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("user_memories")
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
+}
+
+// ---------------------------------------------------------
+// پیام‌های هر گفتگو
+// ---------------------------------------------------------
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  role    MessageRole
+  content String      @db.LongText
+
+  // اطلاعات اضافی ایجنت: intent، مراحل فکر کردن، منابع Citation، قدم‌های بعدی پیشنهادی
+  intent          String? @db.VarChar(64)
+  thinkingSteps   Json? // آرایه‌ای از مراحل استدلال ایجنت برای نمایش شفاف در UI
+  citations       Json? // آرایه‌ای از { documentId, title, url, snippet }
+  suggestedActions Json? // آرایه‌ای از { label, action }
+
+  createdAt DateTime @default(now())
+
+  feedback Feedback?
+
+  @@index([conversationId])
+  @@map("messages")
+}
+
+enum FeedbackRating {
+  UP
+  DOWN
+}
+
+// ---------------------------------------------------------
+// فیدبک کاربر روی پاسخ‌های ایجنت (👍/👎)
+// ---------------------------------------------------------
+model Feedback {
+  id        String         @id @default(cuid())
+  messageId String         @unique
+  message   Message        @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  rating    FeedbackRating
+  comment   String?        @db.Text
+  createdAt DateTime       @default(now())
+
+  @@map("feedback")
+}
+
+// ---------------------------------------------------------
+// کش پرسش‌های تکراری برای کاهش هزینه فراخوانی مدل
+// ---------------------------------------------------------
+model QueryCache {
+  id          String   @id @default(cuid())
+  queryHash   String   @db.VarChar(64) // hash نرمال‌شده سوال
+  query       String   @db.Text
+  response    String   @db.LongText
+  citations   Json?
+  hitCount    Int      @default(1)
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime
+
+  @@unique([queryHash])
+  @@index([expiresAt])
+  @@map("query_cache")
+}
+
+// ---------------------------------------------------------
+// لاگ ساخت‌یافته فراخوانی‌های API (برای مانیتورینگ، دیباگ و آنالیز هزینه)
+// ---------------------------------------------------------
+model ApiLog {
+  id             String   @id @default(cuid())
+  sessionId      String?  @db.VarChar(255)
+  conversationId String?  @db.VarChar(255)
+  route          String   @db.VarChar(255)
+  intent         String?  @db.VarChar(64)
+  model          String?  @db.VarChar(128)
+  promptTokens   Int?     @default(0)
+  completionTokens Int?   @default(0)
+  latencyMs      Int?     @default(0)
+  cacheHit       Boolean  @default(false)
+  statusCode     Int?     @default(200)
+  errorMessage   String?  @db.Text
+  createdAt      DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([route])
+  @@map("api_logs")
+}

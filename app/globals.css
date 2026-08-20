@@ -1,0 +1,88 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 3.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 3.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 3.9%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 98%;
+    --secondary: 240 4.8% 95.9%;
+    --secondary-foreground: 240 5.9% 10%;
+    --muted: 240 4.8% 95.9%;
+    --muted-foreground: 240 3.8% 46.1%;
+    --accent: 240 4.8% 95.9%;
+    --accent-foreground: 240 5.9% 10%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 240 5.9% 90%;
+    --input: 240 5.9% 90%;
+    --ring: 217 91% 60%;
+    --radius: 0.65rem;
+  }
+
+  .dark {
+    --background: 240 10% 6%;
+    --foreground: 0 0% 96%;
+    --card: 240 8% 9%;
+    --card-foreground: 0 0% 96%;
+    --popover: 240 8% 9%;
+    --popover-foreground: 0 0% 96%;
+    --primary: 217 91% 65%;
+    --primary-foreground: 240 10% 6%;
+    --secondary: 240 6% 15%;
+    --secondary-foreground: 0 0% 96%;
+    --muted: 240 6% 15%;
+    --muted-foreground: 240 5% 65%;
+    --accent: 240 6% 15%;
+    --accent-foreground: 0 0% 96%;
+    --destructive: 0 62.8% 45%;
+    --destructive-foreground: 0 0% 96%;
+    --border: 240 6% 18%;
+    --input: 240 6% 18%;
+    --ring: 217 91% 65%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    direction: rtl;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "ss01";
+  }
+}
+
+/* اسکرول‌بار سفارشی نازک */
+@layer utilities {
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+  }
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--border));
+    border-radius: 999px;
+  }
+}
+
+/* استایل محتوای مارک‌داون پاسخ ایجنت */
+.prose-chat {
+  @apply prose prose-sm dark:prose-invert max-w-none;
+}
+.prose-chat pre {
+  direction: ltr;
+  text-align: left;
+  @apply rounded-md bg-muted p-3 overflow-x-auto text-xs;
+}
+.prose-chat code {
+  direction: ltr;
+  unicode-bidi: plaintext;
+}
