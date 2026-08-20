@@ -28,7 +28,18 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends openssl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /app ./
+# Install only runtime dependencies. Prisma is intentionally a production
+# dependency because migrations are applied only after the container reaches
+# Liara's private database network.
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts --no-audit --no-fund
+
+# Do not copy the application source into the public registry image. Next's
+# compiled output, generated Prisma client, and migrations are sufficient at
+# runtime.
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/prisma ./prisma
 
 EXPOSE 3000
 
