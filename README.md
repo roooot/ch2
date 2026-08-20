@@ -6,11 +6,14 @@
 
 همه چیز در **یک پروژه Next.js واحد** (فرانت + بک‌اند + پایگاه‌دانش) پیاده‌سازی شده و برای دیپلوی روی پلتفرم Next.js لیارا آماده است.
 
+**نسخهٔ آنلاین:** [liara-copilot.liara.run](https://liara-copilot.liara.run) · **شاخهٔ انتشار:** `main`
+
 ---
 
 ## فهرست مطالب
 
 - [معماری](#معماری)
+- [قابلیت‌های نسخهٔ فعلی](#قابلیتهای-نسخهٔ-فعلی)
 - [استک فنی](#استک-فنی)
 - [ساختار پروژه](#ساختار-پروژه)
 - [راه‌اندازی لوکال](#راه‌اندازی-لوکال)
@@ -77,12 +80,23 @@
 
 | بخش | تکنولوژی |
 |---|---|
-| فریم‌ورک | Next.js 15 (App Router) + TypeScript + React 19 |
-| استایل | Tailwind CSS + shadcn/ui (کامپوننت‌های دستی، بدون وابستگی به CLI) |
+| فریم‌ورک | Next.js 16 (App Router) + TypeScript + React 19 |
+| استایل | Tailwind CSS + shadcn/ui (Sidebar، Sheet، Command، Alert Dialog و …) |
 | هوش مصنوعی | Vercel AI SDK (`ai` + `@ai-sdk/openai` + `@ai-sdk/react`) |
 | دیتابیس | MySQL از طریق Prisma ORM |
 | فونت | Vazirmatn (فارسی، از طریق `next/font/google`) |
 | احراز نشست | کوکی ناشناس `httpOnly` و `secure` در production (بدون نیاز به لاگین) |
+
+---
+
+## قابلیت‌های نسخهٔ فعلی
+
+- **پاسخ مستند و قابل پیگیری:** پاسخ‌های RAG با Citation به صفحهٔ رسمی مستندات لیارا نمایش داده می‌شوند.
+- **پایگاه‌دانش کامل و بدون تکرار:** تنها corpus مخصوص LLM در `public/llms` مخزن رسمی لیارا وارد می‌شود؛ لینک اصلی هر سند برای Citation حفظ می‌شود.
+- **رابط فارسی و واکنش‌گرا:** فونت Vazirmatn، راست‌به‌چپ واقعی، جداسازی درست متن‌های فارسی و انگلیسی، سایدبار موبایل و میان‌بر `Ctrl/Cmd + K` برای فرمان‌ها و جست‌وجوی گفتگوها.
+- **حافظهٔ کاربر و تاریخچه:** خلاصهٔ کنترل‌شدهٔ زمینهٔ گفتگو در کنار تاریخچه ذخیره می‌شود و از سایدبار قابل پاک‌سازی است.
+- **تجربهٔ گفتگو:** هالهٔ ظریف رنگی فقط هنگام شروع گفتگوی جدید دیده می‌شود و پس از نخستین پیام محو می‌گردد.
+- **عملیات ایمن:** endpoint ادمین برای Ingestion با `ADMIN_SECRET` محافظت شده و ورود مستندات به‌صورت مرحله‌ای و قابل ادامه انجام می‌شود.
 
 ---
 
@@ -92,6 +106,7 @@
 liara-copilot/
 ├── app/
 │   ├── api/
+│   │   ├── admin/ingest/route.ts     # Ingestion مرحله‌ای و محافظت‌شده
 │   │   ├── chat/route.ts            # اصلی‌ترین Endpoint - استریم پاسخ ایجنت
 │   │   ├── feedback/route.ts        # ثبت 👍/👎
 │   │   ├── conversations/route.ts   # لیست/حذف گفتگوها
@@ -138,7 +153,7 @@ liara-copilot/
 
 ### پیش‌نیازها
 
-- Node.js نسخه ۱۸ یا ۲۰ به بالا
+- Node.js ۲۰ یا بالاتر
 - یک دیتابیس MySQL ۸ (لوکال، Docker، یا سرویس MySQL لیارا)
 - یک API Key سازگار با OpenAI (خود OpenAI یا هر Proxy سازگار)
 
@@ -184,10 +199,11 @@ npm run dev
 | `MODEL_CHEAP` | مدل ارزان برای Intent/Rerank (پیش‌فرض `gpt-4o-mini`) |
 | `MODEL_STRONG` | مدل قوی برای پاسخ نهایی (پیش‌فرض `gpt-4o`) |
 | `MODEL_EMBEDDING` | مدل Embedding (پیش‌فرض `text-embedding-3-small`) |
-| `ADMIN_SECRET` | برای عملیات ادمین (رزرو شده برای توسعه‌های آینده) |
+| `ADMIN_SECRET` | کلید موردنیاز برای endpoint محافظت‌شدهٔ Ingestion در `/api/admin/ingest` |
 | `RATE_LIMIT_MAX_REQUESTS` / `RATE_LIMIT_WINDOW_MS` | تنظیمات Rate Limiting |
 | `DOCS_GITHUB_REPO` / `DOCS_GITHUB_BRANCH` | ریپو/شاخه منبع Ingestion (پیش‌فرض `liara-cloud/docs` / `master`) |
 | `GITHUB_TOKEN` | (اختیاری) برای افزایش Rate Limit فراخوانی GitHub API در Ingestion |
+| `NEXT_PUBLIC_APP_URL` | آدرس عمومی اپلیکیشن، مانند `https://your-app.liara.run` |
 
 ⚠️ **هرگز** فایل `.env.local` یا هر فایل حاوی کلید واقعی را کامیت نکنید (در `.gitignore` مسدود شده است). فایل `.env.example` نیز باید فقط placeholder داشته باشد. روی پنل لیارا این مقادیر باید از بخش **Environment Variables** تنظیم شوند، نه در کد.
 
@@ -195,7 +211,7 @@ npm run dev
 
 ## اجرای Ingestion مستندات
 
-پایپلاین Ingestion (`lib/ingestion/`) مستندات مارک‌داون ریپوی رسمی `liara-cloud/docs` را دریافت، Chunk، Embed و در MySQL ذخیره می‌کند.
+پایپلاین Ingestion (`lib/ingestion/`) فقط سندهای Markdown بخش `public/llms` از مخزن رسمی `liara-cloud/docs` را دریافت، Chunk، Embed و در MySQL ذخیره می‌کند. این بخش برای مصرف مدل زبانی آماده است، از ورود نسخه‌های تکراری جلوگیری می‌کند و Citation را به لینک اصلی `docs.liara.ir` متصل نگه می‌دارد.
 
 ```bash
 # ایمپورت فقط فایل‌های جدید/تغییریافته (بر اساس هش محتوا)
@@ -214,10 +230,24 @@ npm run ingest:clean
 همان هدر، تعداد `documents`، `chunks` و embeddingهای آماده را برمی‌گرداند.
 
 منبع canonical فقط `public/llms` از شاخهٔ `master` مخزن رسمی است تا اسناد مخصوص LLM
-بدون تکرار و بدون JSX وارد شوند.
+بدون تکرار و بدون JSX وارد شوند. پاسخ `GET /api/admin/ingest` وضعیت فعلی ایندکس را برمی‌گرداند؛ برای نمونهٔ وضعیت:
+
+```bash
+curl https://<your-app>.liara.run/api/admin/ingest \
+  -H "x-admin-secret: <ADMIN_SECRET>"
+```
+
+برای یک batch جدید، ابتدا بدون Cursor اجرا کنید و سپس `nextCursor` برگشتی را تا `completed: true` به فراخوانی بعدی بدهید:
+
+```bash
+curl -X POST https://<your-app>.liara.run/api/admin/ingest \
+  -H "Content-Type: application/json" \
+  -H "x-admin-secret: <ADMIN_SECRET>" \
+  --data '{"limit":24}'
+```
 
 نحوه عملکرد:
-1. دریافت لیست فایل‌های `.md`/`.mdx` از GitHub API (`git/trees?recursive=1`).
+1. دریافت لیست فایل‌های `.md` از مسیر canonical در GitHub API (`git/trees?recursive=1`).
 2. برای هر فایل: پارس Frontmatter، محاسبه `sha256` محتوا.
 3. اگر هش نسبت به قبل تغییر نکرده باشد، فایل رد می‌شود (صرفه‌جویی در هزینه Embedding).
 4. متن به Chunk‌های ۳۵۰ توکنی با هم‌پوشانی ۵۰ توکن تقسیم می‌شود.
@@ -228,6 +258,18 @@ npm run ingest:clean
 ---
 
 ## دیپلوی روی لیارا (گام‌به‌گام)
+
+### روش رسمی این مخزن: انتشار خودکار از GitHub Actions
+
+هر Push روی شاخهٔ `main` به‌صورت خودکار این مسیر را اجرا می‌کند:
+
+```
+main → GitHub Actions → ساخت Docker image → GHCR → Liara deploy → Prisma migrate deploy
+```
+
+Workflow در [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) تعریف شده است. بنابراین برای انتشار تغییرات معمول، فقط کافی است تغییرات بررسی‌شده را روی `main` Push کنید. اجرای Build روی GitHub انجام می‌شود تا محدودیت زمانی Build در لیارا مانع انتشار نشود.
+
+### پیش‌نیازهای یک‌باره
 
 ### ۱. نصب CLI لیارا
 
@@ -251,6 +293,7 @@ liara login
 ```
 DATABASE_URL=mysql://...   (از مرحله ۲)
 OPENAI_API_KEY=sk-...
+OPENAI_BASE_URL=https://api.avalai.ir/v1  # فقط برای ارائه‌دهندهٔ سازگار با OpenAI
 MODEL_CHEAP=gpt-4o-mini
 MODEL_STRONG=gpt-4o
 MODEL_EMBEDDING=text-embedding-3-small
@@ -258,33 +301,34 @@ ADMIN_SECRET=<یک رشته تصادفی و امن>
 RATE_LIMIT_MAX_REQUESTS=20
 RATE_LIMIT_WINDOW_MS=60000
 NODE_ENV=production
+NEXT_PUBLIC_APP_URL=https://<your-app>.liara.run
+DOCS_GITHUB_REPO=liara-cloud/docs
+DOCS_GITHUB_BRANCH=master
 ```
 
-### ۵. اجرای Migration روی دیتابیس Production
+### ۵. تنظیم Secret مربوط به GitHub Actions
 
-قبل از اولین دیپلوی (یا بعد از هر تغییر در schema)، از یک ماشین با دسترسی به `DATABASE_URL` تولید (یا از طریق SSH/Port Forward لیارا):
+در تنظیمات مخزن GitHub، از مسیر **Settings → Secrets and variables → Actions** یک Secret با نام زیر بسازید:
 
 ```bash
-DATABASE_URL="<connection-string-تولید>" npx prisma migrate deploy
+LIARA_API_TOKEN=<Liara API token>
 ```
 
-### ۶. دیپلوی
+این توکن فقط در زمان اجرای Workflow استفاده می‌شود و نباید در کد، فایل `.env` یا README قرار بگیرد.
 
-از ریشه پروژه (جایی که `liara.json` قرار دارد):
+### ۶. انتشار نسخه
+
+بعد از Commit و Push روی `main`:
 
 ```bash
-liara deploy
+git push origin main
 ```
 
-CLI به‌صورت خودکار `next build` را روی سرور Build لیارا اجرا کرده و اپلیکیشن را با خروجی `standalone` (تعریف‌شده در `next.config.ts`) دیپلوی می‌کند.
+GitHub Actions image را در GitHub Container Registry منتشر می‌کند و همان image را در لیارا deploy می‌کند. Migrationهای Prisma نیز هنگام راه‌اندازی container و در شبکهٔ خصوصی دیتابیس به‌شکل idempotent اجرا می‌شوند؛ در روند عادی، اجرای دستی Migration لازم نیست.
 
 ### ۷. اجرای Ingestion برای اولین‌بار (روی Production)
 
-می‌توانید Ingestion را از لوکال با `DATABASE_URL` تولید اجرا کنید:
-
-```bash
-DATABASE_URL="<connection-string-تولید>" OPENAI_API_KEY="..." npm run ingest
-```
+برای corpus بزرگ مستندات، از endpoint مرحله‌ای توضیح‌داده‌شده در بخش [اجرای Ingestion مستندات](#اجرای-ingestion-مستندات) استفاده کنید. اجرای همهٔ اسناد در یک درخواست یا از داخل image production توصیه نمی‌شود؛ batchهای کوچک با Cursor در برابر Timeout مقاوم هستند.
 
 ### ۸. بررسی سلامت سرویس
 
@@ -345,6 +389,8 @@ curl https://<your-app>.liara.run/api/health
 npm run dev            # اجرای توسعه
 npm run build           # Build نهایی
 npm run type-check      # بررسی تایپ‌ها
+npm run lint            # بررسی کیفیت کد
+npm run ingest          # Ingestion افزایشی مستندات در محیط لوکال
 npm run prisma:studio   # مشاهده گرافیکی دیتابیس
 npm run prisma:migrate:dev  # ساخت Migration جدید بعد از تغییر schema.prisma
 ```
@@ -357,8 +403,10 @@ npm run prisma:migrate:dev  # ساخت Migration جدید بعد از تغییر
 
 ### به‌روزرسانی وابستگی‌ها
 
-این پروژه به‌طور فعال از نسخه‌های پچ‌شده Next.js (`15.5.9+`، رفع CVE-2025-66478 و CVE-2025-55184/55183) استفاده می‌کند. قبل از هر بروزرسانی امنیتی جدید Next.js، `npm audit` را اجرا و راهنمای امنیتی رسمی Vercel را بررسی کنید.
+این پروژه روی Next.js 16 نگه‌داری می‌شود. قبل از هر به‌روزرسانی وابستگی، `npm audit`، `npm run lint` و `npm run type-check` را اجرا و راهنمای امنیتی رسمی Next.js/Vercel را بررسی کنید.
 
 ---
 
 **Liara Copilot** با ❤️ برای جامعه توسعه‌دهندگان ایرانی ساخته شده است.
+
+**طراحی و توسعه توسط تیم فایتر**
