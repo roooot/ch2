@@ -20,6 +20,7 @@ import type { Prisma } from "@prisma/client";
 
 const DOCS_BASE_URL = "https://docs.liara.ir";
 const LLM_DOCS_PREFIX = "public/llms/";
+const MAX_EMBEDDING_BATCH_CHUNKS = 128;
 
 function computeHash(content: string): string {
   return crypto.createHash("sha256").update(content).digest("hex");
@@ -66,6 +67,16 @@ export interface IngestOptions {
   limit?: number;
 }
 
+interface PreparedDocument {
+  path: string;
+  sourceUrl: string;
+  title: string;
+  category: string;
+  contentHash: string;
+  content: string;
+  chunks: string[];
+}
+
 export async function ingestFromGitHub(options?: IngestOptions): Promise<IngestStats> {
   const repo = process.env.DOCS_GITHUB_REPO || "liara-cloud/docs";
   const branch = process.env.DOCS_GITHUB_BRANCH || "master";
@@ -104,6 +115,8 @@ export async function ingestFromGitHub(options?: IngestOptions): Promise<IngestS
     });
   }
 
+  const pendingDocuments: PreparedDocument[] = [];
+
   for (const file of selectedFiles) {
     try {
       const raw = await fetchRawContent(file.url);
@@ -125,53 +138,102 @@ export async function ingestFromGitHub(options?: IngestOptions): Promise<IngestS
       if (textChunks.length === 0) {
         throw new Error("Document has no indexable content.");
       }
-      const embeddings = await generateEmbeddings(textChunks);
-      assertEmbeddingsReady(embeddings, textChunks.length, file.path);
-
-      // دادهٔ قبلی تا زمانی که نسخهٔ جدید کامل و embeddingها معتبر نشده‌اند باقی می‌ماند.
-      await prisma.$transaction(async (tx) => {
-        const document = await tx.document.upsert({
-          where: { sourceUrl },
-          update: {
-            title,
-            category,
-            contentHash,
-            rawContent: content,
-            sourcePath: file.path,
-          },
-          create: {
-            sourceUrl,
-            sourcePath: file.path,
-            title,
-            category,
-            contentHash,
-            rawContent: content,
-          },
-        });
-
-        await tx.chunk.deleteMany({ where: { documentId: document.id } });
-        await tx.chunk.createMany({
-          data: textChunks.map((content, idx) => ({
-            documentId: document.id,
-            content,
-            chunkIndex: idx,
-            tokenCount: estimateTokenCount(content),
-            embedding: embeddings[idx] as unknown as Prisma.InputJsonValue,
-            embeddingDim: embeddings[idx].length,
-          })),
-        });
+      pendingDocuments.push({
+        path: file.path,
+        sourceUrl,
+        title,
+        category,
+        contentHash,
+        content,
+        chunks: textChunks,
       });
-
-      stats.totalChunks += textChunks.length;
-      stats.updated += 1;
-
-      logger.info("document_ingested", { path: file.path, chunks: textChunks.length });
     } catch (error) {
       stats.failed += 1;
       logger.error("document_ingest_failed", {
         path: file.path,
         error: error instanceof Error ? error.message : String(error),
       });
+    }
+  }
+
+  // مدل embedding ورودی‌های متعدد را در یک درخواست پشتیبانی می‌کند. chunkهای چند
+  // صفحه را با هم می‌فرستیم تا ورود اولیهٔ corpus هزاران درخواست شبکه‌ای نسازد.
+  const embeddingBatches: PreparedDocument[][] = [];
+  let currentBatch: PreparedDocument[] = [];
+  let currentChunkCount = 0;
+
+  for (const document of pendingDocuments) {
+    if (
+      currentBatch.length > 0 &&
+      currentChunkCount + document.chunks.length > MAX_EMBEDDING_BATCH_CHUNKS
+    ) {
+      embeddingBatches.push(currentBatch);
+      currentBatch = [];
+      currentChunkCount = 0;
+    }
+    currentBatch.push(document);
+    currentChunkCount += document.chunks.length;
+  }
+  if (currentBatch.length > 0) embeddingBatches.push(currentBatch);
+
+  for (const documents of embeddingBatches) {
+    const texts = documents.flatMap((document) => document.chunks);
+    const embeddings = await generateEmbeddings(texts);
+    assertEmbeddingsReady(embeddings, texts.length, documents.map((document) => document.path).join(", "));
+
+    let embeddingOffset = 0;
+    for (const documentInput of documents) {
+      const documentEmbeddings = embeddings.slice(
+        embeddingOffset,
+        embeddingOffset + documentInput.chunks.length
+      );
+      embeddingOffset += documentInput.chunks.length;
+
+      try {
+        // دادهٔ قبلی تا زمانی که نسخهٔ جدید کامل و embeddingها معتبر نشده‌اند باقی می‌ماند.
+        await prisma.$transaction(async (tx) => {
+          const document = await tx.document.upsert({
+            where: { sourceUrl: documentInput.sourceUrl },
+            update: {
+              title: documentInput.title,
+              category: documentInput.category,
+              contentHash: documentInput.contentHash,
+              rawContent: documentInput.content,
+              sourcePath: documentInput.path,
+            },
+            create: {
+              sourceUrl: documentInput.sourceUrl,
+              sourcePath: documentInput.path,
+              title: documentInput.title,
+              category: documentInput.category,
+              contentHash: documentInput.contentHash,
+              rawContent: documentInput.content,
+            },
+          });
+
+          await tx.chunk.deleteMany({ where: { documentId: document.id } });
+          await tx.chunk.createMany({
+            data: documentInput.chunks.map((content, index) => ({
+              documentId: document.id,
+              content,
+              chunkIndex: index,
+              tokenCount: estimateTokenCount(content),
+              embedding: documentEmbeddings[index] as unknown as Prisma.InputJsonValue,
+              embeddingDim: documentEmbeddings[index].length,
+            })),
+          });
+        });
+
+        stats.totalChunks += documentInput.chunks.length;
+        stats.updated += 1;
+        logger.info("document_ingested", { path: documentInput.path, chunks: documentInput.chunks.length });
+      } catch (error) {
+        stats.failed += 1;
+        logger.error("document_ingest_failed", {
+          path: documentInput.path,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
     }
   }
 
