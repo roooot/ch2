@@ -36,6 +36,12 @@ export interface OrchestrationResult {
   citationsRef: { current: Citation[] };
 }
 
+export interface OrchestrationOptions {
+  /** شناسهٔ نشست برای ابزارهای فقط‌خواندنی حساب متصل لیارا */
+  sessionId?: string;
+  hasLiaraConnection?: boolean;
+}
+
 const HISTORY_LIMIT = 6; // حداکثر تعداد پیام قبلی برای حفظ context بدون افزایش زیاد هزینه
 
 /**
@@ -46,10 +52,12 @@ export async function orchestrate(
   rawUserMessage: string,
   priorMessages: CoreMessage[],
   agentState: AgentState,
-  userMemory = ""
+  userMemory = "",
+  options: OrchestrationOptions = {}
 ): Promise<OrchestrationResult> {
   const steps: ThinkingStep[] = [];
   const citationsRef: { current: Citation[] } = { current: [] };
+  const hasLiaraConnection = options.hasLiaraConnection === true;
 
   const userMessage = sanitizeUserInput(rawUserMessage);
 
@@ -105,10 +113,11 @@ export async function orchestrate(
         advanced.currentStepIndex,
         advanced.totalSteps,
         retrieval.contextText,
-        userMemory
+        userMemory,
+        hasLiaraConnection
       ),
       messages,
-      tools: createAgentTools((c) => citationsRef.current.push(...c)),
+      tools: createAgentTools((c) => citationsRef.current.push(...c), options.sessionId),
       maxSteps: 3,
       newAgentState: newState,
       cacheable: false,
@@ -137,10 +146,11 @@ export async function orchestrate(
         retrieval.contextText,
         troubleshoot.problemSummary,
         troubleshoot.currentStep,
-        userMemory
+        userMemory,
+        hasLiaraConnection
       ),
       messages,
-      tools: createAgentTools((c) => citationsRef.current.push(...c)),
+      tools: createAgentTools((c) => citationsRef.current.push(...c), options.sessionId),
       maxSteps: 4,
       newAgentState: newState,
       cacheable: false,
@@ -160,7 +170,7 @@ export async function orchestrate(
         intent: "clarify_needed",
         thinkingSteps: steps,
         model: cheapModel,
-        system: buildClarifySystemPrompt(userMemory),
+        system: buildClarifySystemPrompt(userMemory, hasLiaraConnection),
         messages,
         maxSteps: 1,
         newAgentState: newState,
@@ -195,10 +205,11 @@ export async function orchestrate(
         system: buildConfigAnalysisSystemPrompt(
           JSON.stringify(analysisResult, null, 2),
           retrieval.contextText,
-          userMemory
+          userMemory,
+          hasLiaraConnection
         ),
         messages,
-        tools: createAgentTools((c) => citationsRef.current.push(...c)),
+        tools: createAgentTools((c) => citationsRef.current.push(...c), options.sessionId),
         maxSteps: 3,
         newAgentState: newState,
         cacheable: false,
@@ -227,10 +238,11 @@ export async function orchestrate(
           retrieval.contextText,
           troubleshootState.problemSummary,
           1,
-          userMemory
+          userMemory,
+          hasLiaraConnection
         ),
         messages,
-        tools: createAgentTools((c) => citationsRef.current.push(...c)),
+        tools: createAgentTools((c) => citationsRef.current.push(...c), options.sessionId),
         maxSteps: 4,
         newAgentState: newState,
         cacheable: false,
@@ -255,10 +267,11 @@ export async function orchestrate(
           0,
           tourState.totalSteps,
           retrieval.contextText,
-          userMemory
+          userMemory,
+          hasLiaraConnection
         ),
         messages,
-        tools: createAgentTools((c) => citationsRef.current.push(...c)),
+        tools: createAgentTools((c) => citationsRef.current.push(...c), options.sessionId),
         maxSteps: 3,
         newAgentState: newState,
         cacheable: false,
@@ -276,7 +289,7 @@ export async function orchestrate(
         system: [
           "تو Liara Copilot هستی، دستیار مستندات لیارا.",
           "کاربر یک پیام غیرفنی (احوال‌پرسی و ...) فرستاده. مودبانه و کوتاه پاسخ بده و بگو آماده کمک درباره لیارا هستی.",
-          buildUserMemoryContext(userMemory),
+          buildUserMemoryContext(userMemory, hasLiaraConnection),
         ].join("\n"),
         messages,
         maxSteps: 1,
@@ -308,12 +321,12 @@ export async function orchestrate(
         intent: "faq",
         thinkingSteps: steps,
         model: strongModel,
-        system: buildFaqSystemPrompt(retrieval.contextText, userMemory),
+        system: buildFaqSystemPrompt(retrieval.contextText, userMemory, hasLiaraConnection),
         messages,
-        tools: createAgentTools((c) => citationsRef.current.push(...c)),
+        tools: createAgentTools((c) => citationsRef.current.push(...c), options.sessionId),
         maxSteps: 3,
         newAgentState: newState,
-        cacheable: true,
+        cacheable: !hasLiaraConnection,
         citationsRef,
       };
     }

@@ -1,6 +1,4 @@
 import { NextRequest } from "next/server";
-import { cookies } from "next/headers";
-import { v4 as uuid } from "uuid";
 import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import {
@@ -22,10 +20,13 @@ import { loadUserMemory, updateUserMemory } from "@/lib/memory/user-memory";
 import { logger } from "@/lib/utils/logger";
 import { createInitialAgentState } from "@/types";
 import type { Citation, ThinkingStep } from "@/types";
+import { getOrCreateAnonymousSessionId } from "@/lib/session";
+import { PayloadTooLargeError, readJsonBodyWithLimit } from "@/lib/security/request-body";
+import { getLiaraConnectionStatus } from "@/lib/liara/connection";
 
 export const maxDuration = 60;
 
-const SESSION_COOKIE = "lc_session";
+const MAX_CHAT_REQUEST_BYTES = 1024 * 1024;
 
 /** کمکی برای دور زدن محدودیت تایپ سخت‌گیرانه JSONValue هنگام نوشتن annotation های ساخت‌یافته */
 function annotate(dataStream: DataStreamWriter, value: Record<string, unknown>) {
@@ -55,18 +56,7 @@ const chatRequestSchema = z.object({
 export async function POST(req: NextRequest) {
   const startedAt = Date.now();
 
-  const cookieStore = await cookies();
-  let sessionId = cookieStore.get(SESSION_COOKIE)?.value;
-  if (!sessionId) {
-    sessionId = uuid();
-    cookieStore.set(SESSION_COOKIE, sessionId, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-      path: "/",
-      maxAge: 60 * 60 * 24 * 180, // شش ماه
-    });
-  }
+  const sessionId = await getOrCreateAnonymousSessionId();
 
   // --- Rate Limiting ---
   const identifier = getClientIdentifier(req.headers, sessionId);
@@ -83,12 +73,15 @@ export async function POST(req: NextRequest) {
 
   let body: z.infer<typeof chatRequestSchema>;
   try {
-    const parsed = chatRequestSchema.safeParse(await req.json());
+    const parsed = chatRequestSchema.safeParse(await readJsonBodyWithLimit(req, MAX_CHAT_REQUEST_BYTES));
     if (!parsed.success) {
       return new Response(JSON.stringify({ error: "بدنه درخواست نامعتبر است." }), { status: 400 });
     }
     body = parsed.data;
-  } catch {
+  } catch (error) {
+    if (error instanceof PayloadTooLargeError) {
+      return new Response(JSON.stringify({ error: "حجم درخواست بیش از حد مجاز است." }), { status: 413 });
+    }
     return new Response(JSON.stringify({ error: "بدنه درخواست نامعتبر است." }), { status: 400 });
   }
 
@@ -148,13 +141,14 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  const [agentState, userMemory] = await Promise.all([
+  const [agentState, userMemory, liaraConnectionStatus] = await Promise.all([
     loadAgentState(conversation.id),
     loadUserMemory(sessionId),
+    getLiaraConnectionStatus(sessionId),
   ]);
 
   // --- بررسی Query Cache برای سوالات تکراری (کاهش هزینه) ---
-  const cached = agentState.phase === "idle" || agentState.phase === "answering"
+  const cached = !liaraConnectionStatus.connected && (agentState.phase === "idle" || agentState.phase === "answering")
     ? await getCachedResponse(userText)
     : null;
 
@@ -210,7 +204,10 @@ export async function POST(req: NextRequest) {
         return;
       }
 
-      const orchestration = await orchestrate(userText, priorMessages, agentState, userMemory);
+      const orchestration = await orchestrate(userText, priorMessages, agentState, userMemory, {
+        sessionId,
+        hasLiaraConnection: liaraConnectionStatus.connected,
+      });
 
       annotate(dataStream, {
         type: "thinking_steps",

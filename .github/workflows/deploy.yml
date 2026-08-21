@@ -2,7 +2,7 @@ name: Build and deploy to Liara
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   workflow_dispatch:
 
 permissions:
@@ -10,11 +10,10 @@ permissions:
   packages: write
 
 concurrency:
-  group: liara-production
+  group: liara-${{ github.ref_name }}
   cancel-in-progress: true
 
 env:
-  APP_ID: liara-copilot
   LIARA_TEAM_ID: 6a86b5ef55e397b04bf25728
   IMAGE_NAME: ghcr.io/roooot/ch2
 
@@ -34,14 +33,36 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Select staging or production target
+        id: target
+        shell: bash
+        run: |
+          if [[ "$GITHUB_REF_NAME" == "dev" ]]; then
+            echo "app_id=liara-copilot-dev" >> "$GITHUB_OUTPUT"
+            echo "image_tag=${IMAGE_NAME}:dev-${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+            {
+              echo "image_tags<<EOF"
+              echo "${IMAGE_NAME}:dev"
+              echo "${IMAGE_NAME}:dev-${GITHUB_SHA}"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+          else
+            echo "app_id=liara-copilot" >> "$GITHUB_OUTPUT"
+            echo "image_tag=${IMAGE_NAME}:${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+            {
+              echo "image_tags<<EOF"
+              echo "${IMAGE_NAME}:latest"
+              echo "${IMAGE_NAME}:${GITHUB_SHA}"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build and publish the application image
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
-          tags: |
-            ${{ env.IMAGE_NAME }}:latest
-            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          tags: ${{ steps.target.outputs.image_tags }}
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
@@ -49,7 +70,8 @@ jobs:
       - name: Deploy the published image to Liara
         env:
           LIARA_API_TOKEN: ${{ secrets.LIARA_API_TOKEN }}
-          IMAGE_TAG: ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          APP_ID: ${{ steps.target.outputs.app_id }}
+          IMAGE_TAG: ${{ steps.target.outputs.image_tag }}
         run: |
           npm install --global @liara/cli@9 --no-audit --no-fund
           liara deploy \

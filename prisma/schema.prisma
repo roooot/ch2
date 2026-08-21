@@ -94,6 +94,28 @@ model UserMemory {
   @@map("user_memories")
 }
 
+// ---------------------------------------------------------
+// اتصال کوتاه‌مدت و فقط‌خواندنی حساب لیارا برای یک نشست ناشناس.
+// tokenCiphertext فقط با کلید سراسری سرور رمزگشایی می‌شود و پس از expiresAt
+// قابل استفاده نیست. هیچ کلید خامی در پیام‌ها، حافظه یا لاگ‌ها ذخیره نمی‌شود.
+// ---------------------------------------------------------
+model LiaraSessionConnection {
+  id                String   @id @default(cuid())
+  sessionId         String   @unique @db.VarChar(255)
+  tokenCiphertext   String   @db.Text
+  encryptionIv      String   @db.VarChar(64)
+  encryptionAuthTag String   @db.VarChar(64)
+  tokenFingerprint  String   @db.VarChar(64)
+  teamId            String   @db.VarChar(191)
+  lastValidatedAt   DateTime
+  expiresAt         DateTime
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([expiresAt])
+  @@map("liara_session_connections")
+}
+
 enum MessageRole {
   USER
   ASSISTANT

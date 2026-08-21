@@ -1,16 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   BookOpen,
   Brain,
+  CheckCircle2,
   Command,
   FileJson,
   History,
+  KeyRound,
+  Link2,
   MessageSquare,
   MessageSquarePlus,
   Rocket,
   Search,
+  ShieldCheck,
   Trash2,
   Wrench,
 } from "lucide-react";
@@ -35,7 +39,18 @@ import {
   CommandShortcut,
 } from "@/components/ui/command";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Sidebar,
   SidebarContent,
@@ -72,6 +87,25 @@ const QUICK_GUIDES = [
     prompt: "اپلیکیشن من روی لیارا خطا می‌دهد؛ قدم‌به‌قدم کمکم کن عیب‌یابی کنم.",
   },
 ];
+
+type LiaraConnection = {
+  connected: boolean;
+  teamId?: string;
+  expiresAt?: string;
+  lastValidatedAt?: string;
+};
+
+function formatExpiry(value?: string) {
+  if (!value) return "تا پایان این نشست";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "تا پایان این نشست";
+
+  return new Intl.DateTimeFormat("fa-IR", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
+}
 
 function groupConversations(conversations: ConversationSummary[]) {
   const today = new Date();
@@ -112,6 +146,35 @@ export function ConversationSidebar({
   const [commandOpen, setCommandOpen] = useState(false);
   const [memoryDialogOpen, setMemoryDialogOpen] = useState(false);
   const [conversationToDelete, setConversationToDelete] = useState<ConversationSummary | null>(null);
+  const [connectionDialogOpen, setConnectionDialogOpen] = useState(false);
+  const [connection, setConnection] = useState<LiaraConnection | null>(null);
+  const [isLoadingConnection, setIsLoadingConnection] = useState(true);
+  const [isSavingConnection, setIsSavingConnection] = useState(false);
+  const [isDisconnecting, setIsDisconnecting] = useState(false);
+  const [disconnectConfirmationOpen, setDisconnectConfirmationOpen] = useState(false);
+  const [apiKey, setApiKey] = useState("");
+  const [teamId, setTeamId] = useState("");
+  const [connectionError, setConnectionError] = useState<string | null>(null);
+  const [connectionSuccess, setConnectionSuccess] = useState(false);
+
+  const isConnected = Boolean(connection?.connected);
+
+  const loadConnection = useCallback(async (showError = false) => {
+    setIsLoadingConnection(true);
+    if (showError) setConnectionError(null);
+
+    try {
+      const response = await fetch("/api/liara/connection", { cache: "no-store" });
+      if (!response.ok) throw new Error("Could not load connection");
+      const data = (await response.json()) as LiaraConnection;
+      setConnection(data);
+    } catch {
+      setConnection(null);
+      if (showError) setConnectionError("وضعیت اتصال در حال حاضر قابل دریافت نیست. دوباره تلاش کنید.");
+    } finally {
+      setIsLoadingConnection(false);
+    }
+  }, []);
 
   useEffect(() => {
     const openCommand = () => setCommandOpen(true);
@@ -156,6 +219,29 @@ export function ConversationSidebar({
     };
   }, [refreshKey]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    fetch("/api/liara/connection", { cache: "no-store" })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Could not load connection");
+        return response.json() as Promise<LiaraConnection>;
+      })
+      .then((data) => {
+        if (!cancelled) setConnection(data);
+      })
+      .catch(() => {
+        if (!cancelled) setConnection(null);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoadingConnection(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const groups = useMemo(() => groupConversations(conversations), [conversations]);
 
   const closeMobileSidebar = () => {
@@ -191,6 +277,72 @@ export function ConversationSidebar({
       if (activeConversationId === conversation.id) onNewChat();
     } catch {
       setHasError(true);
+    }
+  };
+
+  const handleConnectionDialogChange = (open: boolean) => {
+    setConnectionDialogOpen(open);
+    if (!open) {
+      setApiKey("");
+      setConnectionError(null);
+      setConnectionSuccess(false);
+      return;
+    }
+
+    void loadConnection(true);
+  };
+
+  const saveConnection = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (isSavingConnection) return;
+
+    if (!apiKey.trim() || !teamId.trim()) {
+      setConnectionSuccess(false);
+      setConnectionError("کلید API و شناسهٔ تیم را وارد کنید.");
+      return;
+    }
+
+    setIsSavingConnection(true);
+    setConnectionError(null);
+    setConnectionSuccess(false);
+
+    try {
+      const response = await fetch("/api/liara/connection", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apiKey: apiKey.trim(), teamId: teamId.trim() }),
+      });
+      if (!response.ok) {
+        throw new Error("Could not validate connection");
+      }
+
+      const data = (await response.json()) as LiaraConnection;
+      setConnection(data);
+      setApiKey("");
+      setTeamId("");
+      setConnectionSuccess(true);
+    } catch {
+      setConnectionError("کلید API یا شناسهٔ تیم قابل تأیید نیست. اطلاعات را بررسی و دوباره تلاش کنید.");
+    } finally {
+      setIsSavingConnection(false);
+    }
+  };
+
+  const disconnect = async () => {
+    if (isDisconnecting) return;
+    setIsDisconnecting(true);
+    setConnectionError(null);
+
+    try {
+      const response = await fetch("/api/liara/connection", { method: "DELETE" });
+      if (!response.ok) throw new Error("Could not disconnect");
+      setConnection(null);
+      setConnectionSuccess(false);
+      setDisconnectConfirmationOpen(false);
+    } catch {
+      setConnectionError("قطع اتصال انجام نشد. دوباره تلاش کنید.");
+    } finally {
+      setIsDisconnecting(false);
     }
   };
 
@@ -323,6 +475,21 @@ export function ConversationSidebar({
                 <span>پاک‌کردن حافظه</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
+            <SidebarMenuItem>
+              <SidebarMenuButton onClick={() => handleConnectionDialogChange(true)} tooltip="اتصال حساب لیارا">
+                {isConnected ? <Link2 data-icon="inline-start" /> : <KeyRound data-icon="inline-start" />}
+                <span>اتصال حساب لیارا</span>
+                {isConnected && (
+                  <Badge
+                    variant="outline"
+                    className="ms-auto gap-1 border-emerald-500/35 bg-emerald-500/5 px-1.5 text-[10px] font-normal text-emerald-700 dark:text-emerald-300 group-data-[collapsible=icon]:hidden"
+                  >
+                    <span aria-hidden="true" className="size-1.5 rounded-full bg-emerald-500" />
+                    متصل
+                  </Badge>
+                )}
+              </SidebarMenuButton>
+            </SidebarMenuItem>
           </SidebarMenu>
           <div className="mt-1 flex items-center justify-between gap-2 px-2 group-data-[collapsible=icon]:justify-center">
             <span className="text-[11px] text-sidebar-foreground/65 group-data-[collapsible=icon]:hidden">نمایش</span>
@@ -358,6 +525,122 @@ export function ConversationSidebar({
         </CommandList>
       </CommandDialog>
 
+      <Dialog open={connectionDialogOpen} onOpenChange={handleConnectionDialogChange}>
+        <DialogContent dir="rtl" className="max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-md overflow-y-auto p-5 sm:p-6">
+          <DialogHeader className="pe-7 text-start">
+            <div className="mb-1 flex items-center gap-2 text-primary">
+              <ShieldCheck className="size-5" aria-hidden="true" />
+              <DialogTitle>اتصال حساب لیارا</DialogTitle>
+            </div>
+            <DialogDescription className="leading-6">
+              اتصال فقط برای همین نشست نگه‌داری می‌شود. ایجنت صرفاً وضعیت اپلیکیشن و لاگ‌های خطا را می‌خواند و هیچ تغییری در حساب شما ایجاد نمی‌کند.
+            </DialogDescription>
+          </DialogHeader>
+
+          {isLoadingConnection ? (
+            <div className="space-y-3 py-2" aria-label="در حال بررسی اتصال">
+              <Skeleton className="h-5 w-2/3" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-4/5" />
+            </div>
+          ) : isConnected ? (
+            <section className="border-s-2 border-emerald-500/70 bg-muted/45 px-4 py-3" aria-live="polite">
+              <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+                <CheckCircle2 className="size-4 shrink-0 text-emerald-600 dark:text-emerald-400" aria-hidden="true" />
+                اتصال فقط‌خواندنی برقرار است
+              </div>
+              <dl className="mt-3 grid gap-2 text-xs leading-5">
+                <div className="flex items-start justify-between gap-4 border-t border-border/70 pt-2">
+                  <dt className="shrink-0 text-muted-foreground">شناسهٔ تیم</dt>
+                  <dd><bdi dir="ltr" className="font-mono text-[11px] text-foreground">{connection?.teamId ?? "—"}</bdi></dd>
+                </div>
+                <div className="flex items-start justify-between gap-4">
+                  <dt className="shrink-0 text-muted-foreground">اعتبار اتصال</dt>
+                  <dd className="text-start text-foreground">{formatExpiry(connection?.expiresAt)}</dd>
+                </div>
+              </dl>
+            </section>
+          ) : (
+            <form className="space-y-4" onSubmit={saveConnection}>
+              <div className="space-y-2">
+                <Label htmlFor="liara-api-key">کلید API لیارا</Label>
+                <Input
+                  id="liara-api-key"
+                  type="password"
+                  autoComplete="off"
+                  dir="ltr"
+                  value={apiKey}
+                  onChange={(event) => setApiKey(event.target.value)}
+                  placeholder="کلید API خود را وارد کنید"
+                  className="text-left font-mono placeholder:text-right"
+                  disabled={isSavingConnection}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="liara-team-id">شناسهٔ تیم</Label>
+                <Input
+                  id="liara-team-id"
+                  type="text"
+                  autoComplete="off"
+                  dir="ltr"
+                  value={teamId}
+                  onChange={(event) => setTeamId(event.target.value)}
+                  placeholder="Team ID"
+                  className="text-left font-mono"
+                  disabled={isSavingConnection}
+                />
+              </div>
+              <p className="text-xs leading-5 text-muted-foreground">
+                کلید پس از اعتبارسنجی نمایش داده نمی‌شود و در مرورگر شما ذخیره نخواهد شد.{" "}
+                <a
+                  href="https://docs.liara.ir/references/api/about/"
+                  target="_blank"
+                  rel="noreferrer noopener"
+                  className="text-primary underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  راهنمای ساخت کلید API
+                </a>
+              </p>
+              {connectionError && (
+                <p role="alert" className="border-s-2 border-destructive bg-destructive/5 px-3 py-2 text-xs leading-5 text-destructive">
+                  {connectionError}
+                </p>
+              )}
+              <DialogFooter className="gap-2 pt-1 sm:gap-2">
+                <Button type="button" variant="outline" onClick={() => handleConnectionDialogChange(false)} disabled={isSavingConnection}>
+                  انصراف
+                </Button>
+                <Button type="submit" disabled={isSavingConnection}>
+                  {isSavingConnection ? "در حال بررسی…" : "بررسی و اتصال"}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+
+          {isConnected && (
+            <>
+              {connectionError && (
+                <p role="alert" className="border-s-2 border-destructive bg-destructive/5 px-3 py-2 text-xs leading-5 text-destructive">
+                  {connectionError}
+                </p>
+              )}
+              <DialogFooter className="gap-2 pt-1 sm:gap-2">
+                <Button type="button" variant="outline" onClick={() => handleConnectionDialogChange(false)}>
+                  بستن
+                </Button>
+                <Button type="button" variant="destructive" onClick={() => setDisconnectConfirmationOpen(true)} disabled={isDisconnecting}>
+                  {isDisconnecting ? "در حال قطع…" : "قطع اتصال"}
+                </Button>
+              </DialogFooter>
+            </>
+          )}
+
+          {connectionSuccess && isConnected && (
+            <p className="sr-only" role="status">اتصال فقط‌خواندنی با موفقیت برقرار شد.</p>
+          )}
+        </DialogContent>
+      </Dialog>
+
       <AlertDialog open={memoryDialogOpen} onOpenChange={setMemoryDialogOpen}>
         <AlertDialogContent dir="rtl">
           <AlertDialogHeader>
@@ -373,6 +656,27 @@ export function ConversationSidebar({
               onClick={() => void onClearMemory()}
             >
               {isClearingMemory ? "در حال پاک‌سازی…" : "پاک‌کردن حافظه"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={disconnectConfirmationOpen} onOpenChange={setDisconnectConfirmationOpen}>
+        <AlertDialogContent dir="rtl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>اتصال حساب لیارا قطع شود؟</AlertDialogTitle>
+            <AlertDialogDescription>
+              کلید موقت این نشست حذف می‌شود و تا اتصال دوباره، ایجنت به اطلاعات حساب لیارای شما دسترسی نخواهد داشت.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:gap-2">
+            <AlertDialogCancel disabled={isDisconnecting}>انصراف</AlertDialogCancel>
+            <AlertDialogAction
+              className={cn("bg-destructive text-destructive-foreground hover:bg-destructive/90")}
+              disabled={isDisconnecting}
+              onClick={() => void disconnect()}
+            >
+              {isDisconnecting ? "در حال قطع…" : "قطع اتصال"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

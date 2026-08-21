@@ -1,3 +1,5 @@
+import { redactSensitiveData } from "@/lib/security/sensitive-data";
+
 /**
  * محافظت در برابر Prompt Injection
  *
@@ -54,10 +56,12 @@ export function sanitizeRetrievedContent(content: string): string {
  * پاک‌سازی ورودی خام کاربر (حذف کاراکترهای کنترلی مخفی که می‌توانند در حملات استفاده شوند)
  */
 export function sanitizeUserInput(input: string): string {
-  return input
+  return redactSensitiveData(
+    input
     .replace(/[\u200B-\u200F\u202A-\u202E]/g, "") // حذف کاراکترهای Zero-width و RTL/LTR override
     .trim()
-    .slice(0, 4000);
+    .slice(0, 4000)
+  );
 }
 
 /** ساخت هشدار سیستمی در صورت تشخیص تلاش تزریق، بدون افشای جزئیات به کاربر مهاجم */

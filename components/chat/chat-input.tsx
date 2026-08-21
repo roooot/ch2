@@ -12,6 +12,12 @@ import {
   InputGroupTextarea,
 } from "@/components/ui/input-group";
 import { Spinner } from "@/components/ui/spinner";
+import { redactSensitiveData } from "@/lib/security/sensitive-data";
+
+const MAX_CHAT_MESSAGE_CHARACTERS = 4_000;
+const MAX_ATTACHMENT_BYTES = 200 * 1024;
+const ALLOWED_ATTACHMENT_EXTENSIONS = new Set(["json", "log", "txt"]);
+const ALLOWED_ATTACHMENT_TYPES = new Set(["", "application/json", "text/plain", "application/octet-stream"]);
 
 export function ChatInput({
   value,
@@ -39,20 +45,51 @@ export function ChatInput({
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 200 * 1024) {
+    const extension = file.name.split(".").pop()?.toLowerCase() ?? "";
+    if (!ALLOWED_ATTACHMENT_EXTENSIONS.has(extension)) {
+      toast.error("فقط فایل‌های JSON، LOG و TXT قابل بررسی هستند.");
+      event.target.value = "";
+      return;
+    }
+
+    if (!ALLOWED_ATTACHMENT_TYPES.has(file.type)) {
+      toast.error("نوع فایل انتخاب‌شده معتبر نیست.");
+      event.target.value = "";
+      return;
+    }
+
+    if (file.size > MAX_ATTACHMENT_BYTES) {
       toast.error("حجم فایل باید کمتر از ۲۰۰ کیلوبایت باشد.");
       event.target.value = "";
       return;
     }
 
-    const text = await file.text();
-    const isJson = file.name.endsWith(".json");
-    const wrapped = `این فایل ${isJson ? "liara.json" : "لاگ خطا"} من است، لطفاً بررسی کن:\n\`\`\`${
-      isJson ? "json" : ""
-    }\n${text.slice(0, 6000)}\n\`\`\``;
+    try {
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+      if (!isPlainText(text) || (extension === "json" && !isValidJson(text))) {
+        toast.error(extension === "json" ? "فایل JSON معتبر نیست." : "فایل باید یک متن UTF-8 معتبر باشد.");
+        return;
+      }
 
-    onChange(wrapped);
-    event.target.value = "";
+      const isJson = extension === "json";
+      const prefix = `این فایل ${isJson ? "liara.json" : "لاگ خطا"} من است، لطفاً بررسی کن:\n\`\`\`${
+        isJson ? "json" : ""
+      }\n`;
+      const suffix = "\n\`\`\`";
+      const maxContentLength = MAX_CHAT_MESSAGE_CHARACTERS - prefix.length - suffix.length;
+      const content = redactSensitiveData(text.slice(0, Math.max(0, maxContentLength)));
+      const wrapped = `${prefix}${content}${suffix}`;
+
+      if (content !== text.slice(0, Math.max(0, maxContentLength))) {
+        toast.message("مقادیر حساس احتمالی پیش از ارسال ماسک شدند.");
+      }
+      onChange(wrapped);
+    } catch {
+      toast.error("خواندن فایل ممکن نشد. دوباره تلاش کنید.");
+    } finally {
+      event.target.value = "";
+    }
   };
 
   return (
@@ -75,9 +112,10 @@ export function ChatInput({
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="سؤال خود را دربارهٔ لیارا بپرسید…"
+          maxLength={MAX_CHAT_MESSAGE_CHARACTERS}
           rows={1}
           disabled={isLoading}
-          className="min-h-20 max-h-44 text-start text-sm leading-6 [unicode-bidi:plaintext]"
+          className="min-h-20 max-h-44 text-start text-sm leading-6 placeholder:text-right [unicode-bidi:plaintext]"
         />
         <InputGroupAddon align="block-end" className="justify-between border-t border-border">
           <div className="flex items-center gap-1">
@@ -116,4 +154,19 @@ export function ChatInput({
       </InputGroup>
     </Field>
   );
+}
+
+function isPlainText(value: string): boolean {
+  // متن‌های واقعی ممکن است tab/newline داشته باشند؛ کنترل‌کاراکترهای دیگر
+  // معمولاً نشانهٔ یک فایل باینری با پسوند جعلی هستند.
+  return !/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(value);
+}
+
+function isValidJson(value: string): boolean {
+  try {
+    JSON.parse(value);
+    return true;
+  } catch {
+    return false;
+  }
 }

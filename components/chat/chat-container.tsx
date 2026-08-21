@@ -173,7 +173,7 @@ export function ChatContainer() {
           <div className="flex shrink-0 items-center gap-1 sm:gap-2">
             <Badge variant="outline" className="hidden gap-1.5 border-border text-xs font-normal md:inline-flex">
               <span aria-hidden="true" className="size-1.5 rounded-full bg-primary" />
-              سرویس آماده
+              آماده برای پاسخ‌گویی
             </Badge>
             <Button
               type="button"
