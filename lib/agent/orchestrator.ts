@@ -293,14 +293,16 @@ export async function orchestrate(
 
     case "chitchat": {
       newState = { ...newState, phase: "answering" };
-      steps.push({ type: "generation", label: "پاسخ مکالمه‌ای عمومی", status: "done" });
+      steps.push({ type: "generation", label: "درخواست خارج از محدودهٔ لیارا", status: "done" });
       return {
         intent: "chitchat",
         thinkingSteps: steps,
         model: cheapModel,
         system: [
-          "تو Liara Copilot هستی، دستیار مستندات لیارا.",
-          "کاربر یک پیام غیرفنی (احوال‌پرسی و ...) فرستاده. مودبانه و کوتاه پاسخ بده و بگو آماده کمک درباره لیارا هستی.",
+          "تو Liara Copilot هستی، دستیار تخصصی مستندات و پروژه‌های لیارا.",
+          "پیام کاربر خارج از محدودهٔ لیارا است. مطلقاً به خود سؤال پاسخ نده؛ حتی اگر یک سؤال عمومی، ساده یا مکالمه‌ای باشد.",
+          "فقط در یک جملهٔ کوتاه و مودبانه اعلام کن که این دستیار صرفاً دربارهٔ مستندات، سرویس‌ها، تنظیمات، خطاها و پروژه‌های لیارا کمک می‌کند و از کاربر بخواه سؤال مرتبط با لیارا بپرسد.",
+          "هیچ واقعیت عمومی، پاسخ آموزشی، لینک یا توضیح اضافه‌ای ارائه نکن.",
           buildUserMemoryContext(userMemory, hasLiaraConnection),
         ].join("\n"),
         messages,
@@ -360,7 +362,7 @@ function translateIntent(intent: IntentType): string {
     config_analysis: "تحلیل پیکربندی",
     guided_tour: "تور راهنما",
     clarify_needed: "نیاز به توضیح بیشتر",
-    chitchat: "گفتگوی عمومی",
+    chitchat: "خارج از محدودهٔ لیارا",
     unknown: "نامشخص",
   };
   return map[intent] ?? intent;
