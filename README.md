@@ -6,8 +6,7 @@
 
 همه چیز در **یک پروژه Next.js واحد** (فرانت + بک‌اند + پایگاه‌دانش) پیاده‌سازی شده و برای دیپلوی روی پلتفرم Next.js لیارا آماده است.
 
-**نسخهٔ آنلاین:** [liara-copilot.liara.run](https://liara-copilot.liara.run) · **شاخهٔ انتشار:** `main`
-**محیط آزمایشی:** [liara-copilot-dev.liara.run](https://liara-copilot-dev.liara.run) · **شاخه:** `dev`
+**نسخهٔ آنلاین:** [liara-copilot-dev.liara.run](https://liara-copilot-dev.liara.run) · **شاخهٔ اصلی:** `main`
 
 ---
 
@@ -265,13 +264,14 @@ curl -X POST https://<your-app>.liara.run/api/admin/ingest \
 
 ### روش رسمی این مخزن: انتشار خودکار از GitHub Actions
 
-هر Push روی شاخهٔ `main` به‌صورت خودکار این مسیر را اجرا می‌کند:
+هر Push روی شاخهٔ `dev` یا `main` به‌صورت خودکار این مسیر را اجرا می‌کند:
 
 ```
-main → GitHub Actions → ساخت Docker image → GHCR → Liara deploy → Prisma migrate deploy
+dev → GitHub Actions → liara-copilot-dev
+main → GitHub Actions → liara-copilot
 ```
 
-Workflow در [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) تعریف شده است. بنابراین برای انتشار تغییرات معمول، فقط کافی است تغییرات بررسی‌شده را روی `main` Push کنید. اجرای Build روی GitHub انجام می‌شود تا محدودیت زمانی Build در لیارا مانع انتشار نشود.
+Workflow در [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) تعریف شده است. جریان پیشنهادی این است که ابتدا تغییرات روی `dev` بررسی شوند و پس از تأیید به `main` برسند. اجرای Build روی GitHub انجام می‌شود تا محدودیت زمانی Build در لیارا مانع انتشار نشود.
 
 ### پیش‌نیازهای یک‌باره
 
@@ -302,6 +302,7 @@ MODEL_CHEAP=gpt-4o-mini
 MODEL_STRONG=gpt-4o
 MODEL_EMBEDDING=text-embedding-3-small
 ADMIN_SECRET=<یک رشته تصادفی و امن>
+LIARA_CONNECTION_ENCRYPTION_KEY=<کلید Base64 تصادفی ۳۲ بایتی>
 RATE_LIMIT_MAX_REQUESTS=20
 RATE_LIMIT_WINDOW_MS=60000
 NODE_ENV=production
@@ -360,7 +361,7 @@ curl https://<your-app>.liara.run/api/health
    - **Troubleshoot**: فرآیند چندمرحله‌ای؛ وضعیت (`problemSummary`, `stepsAsked`, `currentStep`) بین پیام‌ها در دیتابیس حفظ می‌شود.
    - **Config Analysis**: تحلیل قانون‌محور و قطعی (`lib/agent/config-analyzer.ts`) روی `liara.json`/لاگ خطا، سپس توضیح آن به زبان طبیعی توسط مدل.
    - **Guided Tour**: تورهای از پیش تعریف‌شده (`lib/agent/guided-tour.ts`) با پیشروی مرحله‌به‌مرحله.
-4. **Tools (`lib/agent/tools.ts`)**: مدل قوی می‌تواند در طول تولید پاسخ (`maxSteps` > 1) به‌صورت خودمختار `searchLiariaDocs` یا `analyzeLiariaConfig` را دوباره صدا بزند اگر Context اولیه کافی نبود.
+4. **Tools (`lib/agent/tools.ts`)**: مدل قوی می‌تواند در طول تولید پاسخ (`maxSteps` > 1) به‌صورت خودمختار مستندات را جست‌وجو یا فایل پیکربندی را تحلیل کند. اگر کاربر اتصال موقت حسابش را فعال کرده باشد، فقط برای درخواست صریح دربارهٔ پنل شخصی، می‌تواند فهرست اپ‌ها یا لاگ‌های همان حساب را به‌شکل read-only بخواند.
 5. **شفافیت (Thinking Steps)**: هر مرحله از تصمیم‌گیری ایجنت به‌صورت `ThinkingStep` ثبت و از طریق Message Annotations به UI استریم می‌شود؛ کاربر می‌تواند با کلیک روی «مراحل فکر کردن ایجنت» آن‌ها را ببیند.
 6. **Suggested Actions**: بعد از هر پاسخ، ۲ تا ۳ قدم بعدی پیشنهادی (به‌صورت دکمه) بر اساس Intent و Citation‌ها تولید می‌شود.
 
@@ -372,6 +373,7 @@ curl https://<your-app>.liara.run/api/health
 - **اتصال حساب کاربر**: اعتبارسنجی با درخواست `GET` به API رسمی لیارا انجام می‌شود و ابزارهای ایجنت صرفاً از endpointهای read-only فهرست اپ‌ها و لاگ استفاده می‌کنند. توکن رمزنگاری‌شده، زمان‌دار و قابل حذف فوری است.
 - **حدود ورودی**: هر پیام چت حداکثر ۴٬۰۰۰ کاراکتر است؛ بدنهٔ چت پیش از JSON parse به ۱ مگابایت محدود می‌شود. فایل‌های پیوست فقط JSON/TXT/LOG حداکثر ۲۰۰ کیلوبایت هستند و هم پسوند و هم محتوای متنی/JSON آن‌ها بررسی می‌شود.
 - **ماسک داده‌های حساس**: توکن‌ها، API Keyها، گذرواژه‌ها، Connection Stringها و مقادیر متغیر محیطی پیش از ذخیره در حافظه یا ارائه به مدل از متن‌های ورودی و لاگ‌های بازیابی‌شده حذف می‌شوند.
+- **منابع پاسخ**: کارت‌های Citation فقط از corpus رسمی `docs.liara.ir` ساخته می‌شوند؛ مسیر ingestion نیز تنها فایل‌های LLM-friendly مخزن رسمی `liara-cloud/docs` را می‌خواند.
 - **Prompt Injection Guard** (`lib/security/prompt-injection.ts`): تشخیص الگوهای رایج حمله + Sanitize محتوای بازیابی‌شده از اسناد قبل از تزریق به پرامپت + دستورالعمل امنیتی صریح در تمام System Prompt‌ها.
 - **Rate Limiting** (`lib/security/rate-limit.ts`): محدودیت نرخ درخواست بر اساس IP + Session (پیش‌فرض ۲۰ درخواست در دقیقه). برای دیپلوی با چند Instance، توصیه می‌شود این بخش با Redis (`REDIS_URL`) جایگزین شود.
 - **Circuit Breaker** (`lib/security/circuit-breaker.ts`): در صورت خرابی متوالی سرویس AI (۵ خطای پیاپی)، درخواست‌های بعدی به‌جای انتظار طولانی و ارور، فوراً fallback می‌گیرند (fail-fast) و بعد از ۳۰ ثانیه به‌صورت Half-Open دوباره تست می‌شوند.
