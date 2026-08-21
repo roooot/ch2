@@ -79,10 +79,22 @@ export async function orchestrate(
   // --- گام ۱: تشخیص Intent ---
   const t0 = Date.now();
   const classification = await classifyIntent(userMessage, recentHistoryTexts);
+  // طبقه‌بند ارزان گاهی یک درخواست کاملاً مشخص دربارهٔ حساب «متصل» را
+  // بیش از حد کلی تشخیص می‌دهد. در آن حالت نباید کاربر را دوباره برای همان
+  // اطلاعاتی که اتصال حاضر است بپرسیم؛ مسیر FAQ ابزارهای فقط‌خواندنی را دارد.
+  const resolvedIntent: IntentType =
+    hasLiaraConnection &&
+    classification.intent === "clarify_needed" &&
+    isConnectedAccountRequest(userMessage)
+      ? "faq"
+      : classification.intent;
   steps.push({
     type: "intent_detection",
-    label: `تشخیص هدف پیام: ${translateIntent(classification.intent)}`,
-    detail: classification.reasoning,
+    label: `تشخیص هدف پیام: ${translateIntent(resolvedIntent)}`,
+    detail:
+      resolvedIntent !== classification.intent
+        ? "درخواست مشخص دربارهٔ حساب متصل؛ استفاده از ابزارهای فقط‌خواندنی"
+        : classification.reasoning,
     status: "done",
     durationMs: Date.now() - t0,
   });
@@ -126,7 +138,7 @@ export async function orchestrate(
   }
 
   // اگر در میانه عیب‌یابی هستیم، ادامه همان مسیر (حفظ Context چندمرحله‌ای)
-  if (agentState.phase === "troubleshooting" && agentState.troubleshoot && classification.intent !== "config_analysis") {
+  if (agentState.phase === "troubleshooting" && agentState.troubleshoot && resolvedIntent !== "config_analysis") {
     const troubleshoot = {
       ...agentState.troubleshoot,
       stepsAsked: [...agentState.troubleshoot.stepsAsked, userMessage],
@@ -158,7 +170,7 @@ export async function orchestrate(
     };
   }
 
-  switch (classification.intent as IntentType) {
+  switch (resolvedIntent) {
     case "clarify_needed": {
       newState = { ...newState, phase: "clarifying" };
       steps.push({
@@ -356,6 +368,12 @@ function translateIntent(intent: IntentType): string {
 
 function isContinueSignal(message: string): boolean {
   return /ادامه|مرحله بعد|next|بعدی|continue/i.test(message);
+}
+
+function isConnectedAccountRequest(message: string): boolean {
+  return /(?:حساب\s*(?:متصل|من)|پنل(?:\s*(?:من|کاربری))?|فهرست\s*(?:اپ|اپلیکیشن)|لیست\s*(?:اپ|اپلیکیشن)|لاگ(?:‌ها|ها)?\s*(?:من|اپلیکیشن|اپ)|وضعیت\s*(?:اپ|اپلیکیشن|پروژه)|(?:اپ|اپلیکیشن|پروژه)(?:‌ها|ها)?\s*(?:من|متصل))/i.test(
+    message
+  );
 }
 
 function contentToText(content: CoreMessage["content"]): string {
